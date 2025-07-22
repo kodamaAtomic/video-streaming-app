@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Streaming App - Test</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: white;
+        }
+        .status {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .error {
+            background-color: #f44336;
+        }
+        .success {
+            background-color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Video Streaming App</h1>
+            <div class="upload-section">
+                <input type="file" id="videoUpload" accept="video/*" multiple>
+                <button id="uploadBtn">Upload Videos</button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="video-player-container" id="videoPlayerContainer" style="display: none;">
+                <video id="videoPlayer" controls>
+                    Your browser does not support the video tag.
+                </video>
+                <div class="video-info">
+                    <h3 id="videoTitle">Video Title</h3>
+                    <button id="closePlayer">Close Player</button>
+                </div>
+            </div>
+
+            <div class="video-grid" id="videoGrid">
+                <div class="loading">Loading videos...</div>
+            </div>
+        </main>
+
+        <div class="status" id="status">
+            <h3>System Status</h3>
+            <p>Checking server connection...</p>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/videoPlayer.js"></script>
+    <script src="js/thumbnailGrid.js"></script>
+    <script>
+        async function checkStatus() {
+            const statusDiv = document.getElementById('status');
+            try {
+                const response = await fetch('/api/videos');
+                const result = await response.json();
+                
+                if (result.success) {
+                    statusDiv.className = 'status success';
+                    statusDiv.innerHTML = `
+                        <h3>✅ Server is running!</h3>
+                        <p>Videos loaded: ${result.data.length}</p>
+                        <p>Message: ${result.message || 'Ready'}</p>
+                    `;
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (error) {
+                statusDiv.className = 'status error';
+                statusDiv.innerHTML = `
+                    <h3>❌ Server Error</h3>
+                    <p>Error: ${error.message}</p>
+                    <p>Please check the console for more details.</p>
+                `;
+            }
+        }
+
+        // ページ読み込み時とその後定期的にチェック
+        checkStatus();
+        setInterval(checkStatus, 5000);
+    </script>
+</body>
+</html>

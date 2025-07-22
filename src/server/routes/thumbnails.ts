@@ -1,10 +1,30 @@
 import { Router } from 'express';
-import { ThumbnailController } from '../controllers/thumbnailController';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
-const thumbnailController = new ThumbnailController();
 
-router.get('/', thumbnailController.getThumbnails.bind(thumbnailController));
-router.get('/:id', thumbnailController.getThumbnailById.bind(thumbnailController));
+router.get('/:filename', (req, res) => {
+  const { filename } = req.params;
+  const thumbnailPath = path.join(__dirname, '../../storage/thumbnails', filename);
+  
+  // ファイルの存在確認
+  if (!fs.existsSync(thumbnailPath)) {
+    return res.status(404).json({
+      success: false,
+      message: 'Thumbnail not found'
+    });
+  }
 
-export default router;
+  // 適切なContent-Typeを設定
+  res.set({
+    'Content-Type': 'image/png',
+    'Cache-Control': 'public, max-age=86400' // 24時間キャッシュ
+  });
+
+  // ファイルストリーミング
+  const fileStream = fs.createReadStream(thumbnailPath);
+  fileStream.pipe(res);
+});
+
+export { router as thumbnailRoutes };

@@ -1,72 +1,139 @@
 # Video Streaming App
 
-このプロジェクトは、ローカルの動画ストレージから動画をサムネイル表示し、再生するためのシステムです。以下にプロジェクトの概要と使用方法を示します。
-
-## 概要
-
-- **サーバーサイド**: Expressを使用して構築されており、動画とサムネイルに関連するAPIエンドポイントを提供します。
-- **クライアントサイド**: HTML、CSS、JavaScriptを使用して、ユーザーインターフェースを構築しています。動画のリスト表示や再生機能を実装しています。
-
-## ディレクトリ構造
-
-```
-video-streaming-app
-├── src
-│   ├── server
-│   │   ├── app.ts
-│   │   ├── routes
-│   │   │   ├── videos.ts
-│   │   │   └── thumbnails.ts
-│   │   ├── controllers
-│   │   │   ├── videoController.ts
-│   │   │   └── thumbnailController.ts
-│   │   ├── services
-│   │   │   ├── videoService.ts
-│   │   │   └── thumbnailGenerator.ts
-│   │   └── types
-│   │       └── index.ts
-│   └── client
-│       ├── index.html
-│       ├── css
-│       │   └── styles.css
-│       ├── js
-│       │   ├── app.js
-│       │   ├── videoPlayer.js
-│       │   └── thumbnailGrid.js
-│       └── components
-│           ├── VideoGrid.js
-│           └── VideoPlayer.js
-├── storage
-│   ├── videos
-│   └── thumbnails
-├── package.json
-├── tsconfig.json
-└── README.md
-```
-
-## 使用方法
-
-1. **依存関係のインストール**:
-   プロジェクトのルートディレクトリで以下のコマンドを実行して、必要な依存関係をインストールします。
-   ```
-   npm install
-   ```
-
-2. **サーバーの起動**:
-   サーバーを起動するには、以下のコマンドを実行します。
-   ```
-   npm start
-   ```
-
-3. **クライアントのアクセス**:
-   ブラウザを開き、`http://localhost:3000`にアクセスして、アプリケーションを使用します。
+ローカル動画ストレージをブラウザからサムネイル表示・再生できるシステムです。
 
 ## 機能
 
-- 動画のリスト表示
-- 動画の再生
-- サムネイルの表示
+- 動画ファイルの自動検出とサムネイル生成
+- ブラウザでの動画ストリーミング再生
+- 動画ファイルのアップロード
+- レスポンシブデザイン
+- 動画ファイルの削除
 
-## ライセンス
+## 技術スタック
 
-このプロジェクトはMITライセンスの下で提供されています。
+### バックエンド
+- Node.js + Express
+- TypeScript
+- FFmpeg (サムネイル生成)
+- Multer (ファイルアップロード)
+
+### フロントエンド
+- Vanilla JavaScript
+- HTML5 Video API
+- CSS Grid/Flexbox
+
+## セットアップ
+
+### 前提条件
+- Node.js (v16以上)
+- FFmpeg がシステムにインストールされていること
+
+### インストール
+
+1. 依存関係のインストール
+   ```bash
+   npm install
+   ```
+
+2. プロジェクトのビルド
+   ```bash
+   npm run build
+   ```
+
+3. 動画フォルダの作成
+   ```bash
+   mkdir -p storage/videos
+   mkdir -p storage/thumbnails
+   ```
+
+4. 既存の動画ファイルを `storage/videos` に配置（任意）
+
+### 起動
+
+#### 開発モード
+```bash
+npm run dev
+```
+
+#### 本番モード
+```bash
+npm run build
+npm run serve
+```
+
+アプリケーションは http://localhost:3000 で起動します。
+
+## 使用方法
+
+1. ブラウザで http://localhost:3000 にアクセス
+2. 既存の動画があれば自動的にサムネイル付きで表示されます
+3. 新しい動画をアップロードするには「Upload Videos」ボタンを使用
+4. サムネイルをクリックして動画を再生
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MIT License## ライセンス- 本番環境では適切なセキュリティ設定を行ってください- サムネイル生成にはFFmpegが必要です- 大きな動画ファイルのアップロードには時間がかかる場合があります## 注意事項```npm run dev```bash### ウォッチモード```npm test```bash### テスト実行## 開発```└── dist/│   └── thumbnails/│   ├── videos/├── storage/│   └── js/│   ├── css/│   ├── index.html├── client/│   └── types/│   ├── services/│   │   └── controllers/│   │   ├── routes/│   │   ├── app.ts│   ├── server/├── src/video-streaming-app/```## ディレクトリ構造- `GET /api/thumbnails/:filename` - サムネイル画像取得### サムネイル関連- `POST /api/videos/upload` - 動画アップロード- `DELETE /api/videos/:id` - 動画削除- `GET /api/videos/:id/stream` - 動画ストリーミング- `GET /api/videos/:id` - 特定動画の情報取得- `GET /api/videos` - 全動画の一覧取得### 動画関連## API エンドポイント- WebM- FLV- WMV- MOV- MKV- AVI- MP4## 対応動画形式5. 不要な動画は「Delete」ボタンで削除可能# このディレクトリを保持するための空ファイル
