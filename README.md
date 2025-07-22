@@ -422,7 +422,7 @@ kill -9 $(lsof -ti:3000)
 3. **権限エラー**
 ```bash
 # ストレージディレクトリの権限を修正
-sudo chown -R tok:tok storage/
+sudo chown -R user:user storage/
 chmod -R 755 storage/
 ```
 

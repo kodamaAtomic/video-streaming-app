@@ -4,7 +4,7 @@ import path from 'path';
 import VideoService from '../services/videoService';
 import { ApiResponse } from '../types';
 
-export class VideoController {
+export default class VideoController {
   private videoService: VideoService;
 
   constructor() {
@@ -14,6 +14,7 @@ export class VideoController {
   async getAllVideos(req: Request, res: Response): Promise<void> {
     try {
       const videos = await this.videoService.getAllVideos();
+      console.log(`Retrieved ${videos.length} videos`);
       const response: ApiResponse = {
         success: true,
         data: videos
@@ -69,6 +70,12 @@ export class VideoController {
         return;
       }
 
+      console.log('File upload info:');
+      console.log('- Original name:', req.file.originalname);
+      console.log('- Filename:', req.file.filename);
+      console.log('- Path:', req.file.path);
+      console.log('- Size:', req.file.size);
+
       const video = await this.videoService.addVideo(req.file);
       const response: ApiResponse = {
         success: true,
@@ -77,6 +84,7 @@ export class VideoController {
       };
       res.json(response);
     } catch (error) {
+      console.error('Upload error:', error);
       const response: ApiResponse = {
         success: false,
         message: 'Failed to upload video',
@@ -153,6 +161,10 @@ export class VideoController {
   async deleteVideo(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
+      
+      // デバッグ情報を出力
+      await (this.videoService as any).debugVideoInfo(id);
+      
       const success = await this.videoService.deleteVideo(id);
       
       if (!success) {
@@ -170,6 +182,7 @@ export class VideoController {
       };
       res.json(response);
     } catch (error) {
+      console.error('Delete video error:', error);
       const response: ApiResponse = {
         success: false,
         message: 'Failed to delete video',
@@ -179,5 +192,3 @@ export class VideoController {
     }
   }
 }
-
-export default VideoController;

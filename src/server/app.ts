@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
+import { videoRoutes } from './routes/videos';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,17 +39,11 @@ app.use(compression());
 app.use(express.static(path.join(__dirname, '../../client')));
 app.use('/storage', express.static(path.join(__dirname, '../../storage')));
 
-// JSONパーサー
+// JSONパーサー（ファイルアップロード前に設定）
 app.use(express.json());
 
-// ルートの動的インポート（エラー回避）
-app.get('/api/videos', (req, res) => {
-  res.json({
-    success: true,
-    data: [],
-    message: 'Video service is starting...'
-  });
-});
+// API ルートの登録
+app.use('/api/videos', videoRoutes);
 
 // メインページ
 app.get('/', (req, res) => {
@@ -69,6 +64,12 @@ app.get('/', (req, res) => {
   }
 });
 
+// デバッグ用: すべてのルートをログ出力
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
+
 // エラーハンドリング
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Server error:', err);
@@ -87,6 +88,57 @@ app.use((req, res) => {
     message: 'Not Found',
     path: req.path
   });
+});
+
+// デバッグ用エンドポイント
+app.get('/api/debug/ffmpeg', async (req, res) => {
+  try {
+    const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
+    const generator = new ThumbnailGenerator();
+    const result = await generator.testFFmpeg();
+    res.json({ success: result, message: result ? 'FFmpeg working' : 'FFmpeg not working' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// FFmpeg詳細情報エンドポイント
+app.get('/api/debug/ffmpeg-info', async (req, res) => {
+  try {
+    const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
+    const generator = new ThumbnailGenerator();
+    
+    const testResult = await generator.simpleFFmpegTest();
+    
+    res.json({
+      test: testResult,
+      ffmpegStatic: require('ffmpeg-static'),
+      systemPaths: {
+        '/usr/bin/ffmpeg': require('fs').existsSync('/usr/bin/ffmpeg'),
+        '/usr/local/bin/ffmpeg': require('fs').existsSync('/usr/local/bin/ffmpeg'),
+        '/opt/homebrew/bin/ffmpeg': require('fs').existsSync('/opt/homebrew/bin/ffmpeg')
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
+// ルート確認用の追加
+console.log('Registered routes:');
+app._router.stack.forEach((middleware: any) => {
+  if (middleware.route) {
+    console.log(`${Object.keys(middleware.route.methods)} ${middleware.route.path}`);
+  } else if (middleware.name === 'router') {
+    middleware.handle.stack.forEach((handler: any) => {
+      if (handler.route) {
+        console.log(`${Object.keys(handler.route.methods)} /api/videos${handler.route.path}`);
+      }
+    });
+  }
 });
 
 app.listen(PORT, () => {

@@ -72,13 +72,17 @@ export default class VideoService {
 
   private async ensureThumbnail(metadata: VideoMetadata): Promise<void> {
     try {
+      console.log(`Generating thumbnail for: ${metadata.filename}`);
       const thumbnailPath = await this.thumbnailGenerator.generateThumbnail(
         metadata.path,
         metadata.id
       );
       metadata.thumbnailPath = thumbnailPath;
+      console.log(`Thumbnail generated: ${thumbnailPath}`);
     } catch (error) {
       console.error(`Failed to generate thumbnail for ${metadata.filename}:`, error);
+      // サムネイル生成に失敗してもビデオメタデータは保持
+      metadata.thumbnailPath = undefined;
     }
   }
 
@@ -92,7 +96,12 @@ export default class VideoService {
 
   async addVideo(file: Express.Multer.File): Promise<VideoMetadata> {
     const videoId = this.generateVideoId(file.originalname + Date.now());
-    const videoPath = path.join(this.videoDir, file.filename);
+    // ファイルパスを正しく設定（file.pathを使用）
+    const videoPath = file.path;
+
+    console.log(`Adding video: ${file.originalname}`);
+    console.log(`File path: ${videoPath}`);
+    console.log(`Video ID: ${videoId}`);
 
     const metadata: VideoMetadata = {
       id: videoId,
@@ -108,27 +117,59 @@ export default class VideoService {
     await this.ensureThumbnail(metadata);
 
     this.videos.set(videoId, metadata);
+    console.log(`Video added successfully: ${metadata.originalName}`);
     return metadata;
   }
 
   async deleteVideo(id: string): Promise<boolean> {
     const video = this.videos.get(id);
-    if (!video) return false;
+    if (!video) {
+      console.log(`Video not found in memory: ${id}`);
+      return false;
+    }
+
+    console.log(`Attempting to delete video: ${video.originalName}`);
+    console.log(`Video path: ${video.path}`);
 
     try {
-      // 動画ファイル削除
-      await fs.unlink(video.path);
+      // ファイルの存在確認
+      if (fsSynce.existsSync(video.path)) {
+        await fs.unlink(video.path);
+        console.log(`Video file deleted: ${video.path}`);
+      } else {
+        console.warn(`Video file not found: ${video.path}`);
+      }
       
       // サムネイル削除
-      if (video.thumbnailPath) {
+      if (video.thumbnailPath && fsSynce.existsSync(video.thumbnailPath)) {
         await fs.unlink(video.thumbnailPath);
+        console.log(`Thumbnail deleted: ${video.thumbnailPath}`);
+      } else {
+        console.warn(`Thumbnail not found: ${video.thumbnailPath}`);
       }
 
       this.videos.delete(id);
+      console.log(`Video metadata removed from memory: ${id}`);
       return true;
     } catch (error) {
       console.error(`Failed to delete video ${id}:`, error);
       return false;
+    }
+  }
+
+  // デバッグ用メソッドを追加
+  async debugVideoInfo(id: string): Promise<void> {
+    const video = this.videos.get(id);
+    if (video) {
+      console.log('=== Video Debug Info ===');
+      console.log('ID:', video.id);
+      console.log('Filename:', video.filename);
+      console.log('Original Name:', video.originalName);
+      console.log('Path:', video.path);
+      console.log('Path exists:', fsSynce.existsSync(video.path));
+      console.log('Thumbnail Path:', video.thumbnailPath);
+      console.log('Thumbnail exists:', video.thumbnailPath ? fsSynce.existsSync(video.thumbnailPath) : 'No thumbnail path');
+      console.log('========================');
     }
   }
 }
