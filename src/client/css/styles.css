@@ -1,8 +1,8 @@
 body {
-    font-family: Arial, sans-serif;
     margin: 0;
     padding: 0;
     background-color: #f4f4f4;
+    font-family: Arial, sans-serif;
 }
 
 h1, h2, h3 {
@@ -10,56 +10,394 @@ h1, h2, h3 {
 }
 
 .container {
-    width: 80%;
+    width: 90%;
+    max-width: 1200px;
     margin: auto;
     overflow: hidden;
+    padding: 20px;
 }
 
-.video-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 10px;
+/* ダークモードテーマ */
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-tertiary: #3a3a3a;
+    --text-primary: #ffffff;
+    --text-secondary: #cccccc;
+    --text-muted: #888888;
+    --accent-primary: #007bff;
+    --accent-hover: #0056b3;
+    --border-color: #444444;
+    --shadow-light: rgba(0, 0, 0, 0.3);
+    --shadow-heavy: rgba(0, 0, 0, 0.5);
 }
 
-.video-thumbnail {
-    position: relative;
-    cursor: pointer;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-.video-thumbnail img {
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+h1, h2, h3 {
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+h1 {
+    font-size: 2.5rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    background: linear-gradient(135deg, #007bff, #00d4ff);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 20px rgba(0, 123, 255, 0.3);
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+/* ヘッダーセクション */
+.header {
+    background: var(--bg-secondary);
+    border-radius: 15px;
+    padding: 30px;
+    margin-bottom: 30px;
+    box-shadow: 0 8px 32px var(--shadow-light);
+    border: 1px solid var(--border-color);
+}
+
+/* アップロードセクション */
+#upload-section {
+    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+    border-radius: 15px;
+    padding: 25px;
+    margin-bottom: 30px;
+    box-shadow: 0 8px 32px var(--shadow-light);
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+#upload-section h2 {
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    font-size: 1.5rem;
+}
+
+#upload-section input[type="file"] {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 2px dashed var(--border-color);
+    border-radius: 10px;
+    padding: 15px;
+    margin: 15px 0;
     width: 100%;
+    max-width: 400px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+#upload-section input[type="file"]:hover {
+    border-color: var(--accent-primary);
+    background: var(--bg-secondary);
+}
+
+#upload-section button {
+    background: linear-gradient(135deg, var(--accent-primary), #0056b3);
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    margin: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+#upload-section button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 123, 255, 0.4);
+    background: linear-gradient(135deg, #0056b3, var(--accent-primary));
+}
+
+#upload-progress {
+    margin-top: 15px;
+    font-weight: bold;
+    color: var(--accent-primary);
+}
+
+/* デバッグセクション */
+#debug-section {
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 30px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+#debug-section button {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    padding: 8px 15px;
     border-radius: 5px;
+    cursor: pointer;
+    margin: 5px;
+    font-size: 12px;
+    transition: all 0.3s ease;
 }
 
-.video-thumbnail:hover .overlay {
-    opacity: 1;
+#debug-section button:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
 }
 
-.overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    color: #fff;
+/* サムネイルセクション */
+#thumbnail-section {
+    margin-bottom: 30px;
+}
+
+#thumbnail-section h2 {
+    color: var(--text-primary);
+    margin-bottom: 25px;
+    font-size: 1.8rem;
+    text-align: center;
+}
+
+/* サムネイルグリッド */
+#thumbnail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 25px;
+    padding: 20px 0;
+}
+
+.thumbnail {
+    background: var(--bg-secondary);
+    border-radius: 15px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 32px var(--shadow-light);
+    position: relative;
+}
+
+.thumbnail:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 20px 60px var(--shadow-heavy);
+    border-color: var(--accent-primary);
+}
+
+.thumbnail img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s ease;
+}
+
+.thumbnail:hover img {
+    transform: scale(1.05);
+}
+
+.thumbnail p {
+    padding: 20px;
+    margin: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    background: var(--bg-secondary);
+    font-size: 14px;
+    border-top: 1px solid var(--border-color);
+}
+
+.thumbnail-placeholder {
+    width: 100%;
+    height: 200px;
+    background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
     display: flex;
     align-items: center;
     justify-content: center;
+    border: 2px dashed var(--border-color);
+    color: var(--text-muted);
+    font-size: 16px;
+    font-weight: 500;
+}
+
+/* 削除ボタンのスタイリング */
+.thumbnail button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(220, 53, 69, 0.9);
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+    z-index: 10;
+}
+
+.thumbnail:hover button {
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.thumbnail button:hover {
+    background: rgba(220, 53, 69, 1);
+    transform: scale(1.1);
+    box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
+}
+
+/* ビデオプレイヤーセクション */
+#video-section {
+    background: var(--bg-secondary);
+    border-radius: 15px;
+    padding: 30px;
+    box-shadow: 0 8px 32px var(--shadow-light);
+    border: 1px solid var(--border-color);
+}
+
+#video-section h2 {
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    text-align: center;
 }
 
 .video-player {
     width: 100%;
-    max-width: 800px;
-    margin: 20px auto;
-    border: 2px solid #ccc;
-    border-radius: 5px;
-    background: #000;
+    max-width: 900px;
+    margin: 0 auto;
+    border-radius: 15px;
+    overflow: hidden;
+    box-shadow: 0 8px 32px var(--shadow-heavy);
+    border: 1px solid var(--border-color);
 }
 
 .video-player video {
     width: 100%;
-    border-radius: 5px;
+    height: auto;
+    background: #000;
+    display: block;
+}
+
+/* ローディングメッセージ */
+#thumbnail-grid p {
+    grid-column: 1 / -1;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 18px;
+    padding: 40px;
+    background: var(--bg-secondary);
+    border-radius: 15px;
+    border: 1px solid var(--border-color);
+}
+
+/* レスポンシブデザイン */
+@media (max-width: 768px) {
+    .container {
+        padding: 15px;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    #thumbnail-grid {
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    
+    .thumbnail img {
+        height: 150px;
+    }
+    
+    #upload-section,
+    .header,
+    #video-section {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 480px) {
+    #thumbnail-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .thumbnail img {
+        height: 180px;
+    }
+    
+    h1 {
+        font-size: 1.8rem;
+    }
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.thumbnail {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* スクロールバーのスタイリング */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-primary);
+}
+
+/* 選択テキストのスタイリング */
+::selection {
+    background: rgba(0, 123, 255, 0.3);
+    color: var(--text-primary);
+}
+
+/* フォーカス状態の改善 */
+button:focus,
+input:focus {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
 }

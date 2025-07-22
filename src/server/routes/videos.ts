@@ -52,6 +52,8 @@ const upload = multer({
 router.get('/', videoController.getAllVideos.bind(videoController));
 router.get('/:id', videoController.getVideoById.bind(videoController));
 router.get('/:id/stream', videoController.streamVideo.bind(videoController));
+// 既存のルートに加えて、サムネイル一覧エンドポイントを追加
+router.get('/thumbnails/all', videoController.getAllThumbnails.bind(videoController));
 router.post('/upload', upload.single('video'), videoController.uploadVideo.bind(videoController));
 router.delete('/:id', videoController.deleteVideo.bind(videoController));
 

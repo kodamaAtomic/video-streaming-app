@@ -1,8 +1,6 @@
 import { Request, Response } from 'express';
-import fs from 'fs';
-import path from 'path';
 import VideoService from '../services/videoService';
-import { ApiResponse } from '../types';
+import path from 'path';
 
 export default class VideoController {
   private videoService: VideoService;
@@ -14,19 +12,66 @@ export default class VideoController {
   async getAllVideos(req: Request, res: Response): Promise<void> {
     try {
       const videos = await this.videoService.getAllVideos();
-      console.log(`Retrieved ${videos.length} videos`);
-      const response: ApiResponse = {
+      
+      // サムネイル情報を含めてレスポンス
+      const videosWithThumbnails = videos.map(video => {
+        console.log(`Video: ${video.originalName}`);
+        console.log(`Thumbnail path: ${video.thumbnailPath}`);
+        
+        const thumbnailUrl = video.thumbnailPath ? 
+          `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null;
+        
+        console.log(`Generated thumbnail URL: ${thumbnailUrl}`);
+        
+        return {
+          id: video.id,
+          title: video.originalName,
+          filename: video.filename,
+          originalName: video.originalName,
+          size: video.size,
+          createdAt: video.createdAt,
+          updatedAt: video.updatedAt,
+          thumbnailUrl
+        };
+      });
+
+      res.json({
         success: true,
-        data: videos
-      };
-      res.json(response);
+        data: videosWithThumbnails
+      });
     } catch (error) {
-      const response: ApiResponse = {
+      console.error('Error fetching videos:', error);
+      res.status(500).json({
         success: false,
         message: 'Failed to fetch videos',
         error: error instanceof Error ? error.message : 'Unknown error'
-      };
-      res.status(500).json(response);
+      });
+    }
+  }
+
+  // サムネイル一覧専用のメソッドを追加
+  async getAllThumbnails(req: Request, res: Response): Promise<void> {
+    try {
+      const videos = await this.videoService.getAllVideos();
+      
+      // サムネイル情報のみを返す
+      const thumbnails = videos
+        .filter(video => video.thumbnailPath) // サムネイルが存在するもののみ
+        .map(video => ({
+          videoId: video.id,
+          title: video.originalName,
+          url: `/api/thumbnails/${path.basename(video.thumbnailPath!)}`,
+          createdAt: video.createdAt
+        }));
+
+      res.json(thumbnails);
+    } catch (error) {
+      console.error('Error fetching thumbnails:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch thumbnails',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 
@@ -34,63 +79,33 @@ export default class VideoController {
     try {
       const { id } = req.params;
       const video = await this.videoService.getVideoById(id);
-      
+
       if (!video) {
-        const response: ApiResponse = {
+        res.status(404).json({
           success: false,
           message: 'Video not found'
-        };
-        res.status(404).json(response);
+        });
         return;
       }
 
-      const response: ApiResponse = {
-        success: true,
-        data: video
+      // サムネイル情報を含めてレスポンス
+      const videoWithThumbnail = {
+        ...video,
+        thumbnailUrl: video.thumbnailPath ? 
+          `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null
       };
-      res.json(response);
+
+      res.json({
+        success: true,
+        data: videoWithThumbnail
+      });
     } catch (error) {
-      const response: ApiResponse = {
+      console.error('Error fetching video:', error);
+      res.status(500).json({
         success: false,
         message: 'Failed to fetch video',
         error: error instanceof Error ? error.message : 'Unknown error'
-      };
-      res.status(500).json(response);
-    }
-  }
-
-  async uploadVideo(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.file) {
-        const response: ApiResponse = {
-          success: false,
-          message: 'No file uploaded'
-        };
-        res.status(400).json(response);
-        return;
-      }
-
-      console.log('File upload info:');
-      console.log('- Original name:', req.file.originalname);
-      console.log('- Filename:', req.file.filename);
-      console.log('- Path:', req.file.path);
-      console.log('- Size:', req.file.size);
-
-      const video = await this.videoService.addVideo(req.file);
-      const response: ApiResponse = {
-        success: true,
-        data: video,
-        message: 'Video uploaded successfully'
-      };
-      res.json(response);
-    } catch (error) {
-      console.error('Upload error:', error);
-      const response: ApiResponse = {
-        success: false,
-        message: 'Failed to upload video',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-      res.status(500).json(response);
+      });
     }
   }
 
@@ -98,7 +113,7 @@ export default class VideoController {
     try {
       const { id } = req.params;
       const video = await this.videoService.getVideoById(id);
-      
+
       if (!video) {
         res.status(404).json({
           success: false,
@@ -107,53 +122,74 @@ export default class VideoController {
         return;
       }
 
-      const videoPath = video.path;
-      
-      // ファイルの存在確認
-      if (!fs.existsSync(videoPath)) {
-        res.status(404).json({
-          success: false,
-          message: 'Video file not found'
-        });
-        return;
-      }
-
-      const stat = fs.statSync(videoPath);
+      const fs = require('fs');
+      const stat = fs.statSync(video.path);
       const fileSize = stat.size;
       const range = req.headers.range;
 
       if (range) {
-        // 範囲リクエストの処理
         const parts = range.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
         const chunksize = (end - start) + 1;
-        const file = fs.createReadStream(videoPath, { start, end });
-        
+        const file = fs.createReadStream(video.path, { start, end });
         const head = {
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
           'Accept-Ranges': 'bytes',
           'Content-Length': chunksize,
           'Content-Type': 'video/mp4',
         };
-        
         res.writeHead(206, head);
         file.pipe(res);
       } else {
-        // 通常のレスポンス
         const head = {
           'Content-Length': fileSize,
           'Content-Type': 'video/mp4',
         };
-        
         res.writeHead(200, head);
-        fs.createReadStream(videoPath).pipe(res);
+        fs.createReadStream(video.path).pipe(res);
       }
     } catch (error) {
-      console.error('Video streaming error:', error);
+      console.error('Error streaming video:', error);
       res.status(500).json({
         success: false,
-        message: 'Failed to stream video'
+        message: 'Failed to stream video',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  async uploadVideo(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.file) {
+        res.status(400).json({
+          success: false,
+          message: 'No video file provided'
+        });
+        return;
+      }
+
+      console.log('Uploading video:', req.file);
+      const video = await this.videoService.addVideo(req.file);
+      
+      // サムネイル情報を含めてレスポンス
+      const videoWithThumbnail = {
+        ...video,
+        thumbnailUrl: video.thumbnailPath ? 
+          `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null
+      };
+
+      res.status(201).json({
+        success: true,
+        message: 'Video uploaded successfully',
+        data: videoWithThumbnail
+      });
+    } catch (error) {
+      console.error('Error uploading video:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to upload video',
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   }
@@ -161,34 +197,26 @@ export default class VideoController {
   async deleteVideo(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
-      
-      // デバッグ情報を出力
-      await (this.videoService as any).debugVideoInfo(id);
-      
       const success = await this.videoService.deleteVideo(id);
-      
-      if (!success) {
-        const response: ApiResponse = {
-          success: false,
-          message: 'Video not found or failed to delete'
-        };
-        res.status(404).json(response);
-        return;
-      }
 
-      const response: ApiResponse = {
-        success: true,
-        message: 'Video deleted successfully'
-      };
-      res.json(response);
+      if (success) {
+        res.json({
+          success: true,
+          message: 'Video deleted successfully'
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: 'Video not found'
+        });
+      }
     } catch (error) {
-      console.error('Delete video error:', error);
-      const response: ApiResponse = {
+      console.error('Error deleting video:', error);
+      res.status(500).json({
         success: false,
         message: 'Failed to delete video',
         error: error instanceof Error ? error.message : 'Unknown error'
-      };
-      res.status(500).json(response);
+      });
     }
   }
 }

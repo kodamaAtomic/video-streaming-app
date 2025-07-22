@@ -5,7 +5,7 @@ import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { videoRoutes } from './routes/videos';
-import { thumbnailRoutes } from './routes/thumbnails';  // 追加
+import { thumbnailRoutes } from './routes/thumbnails';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,14 +36,20 @@ app.use(helmet({
 app.use(cors());
 app.use(compression());
 
+// JSONパーサー（ファイルアップロード前に設定）
+app.use(express.json());
+
 // 静的ファイルの提供
 app.use(express.static(path.join(__dirname, '../../client')));
 app.use('/storage', express.static(path.join(__dirname, '../storage')));
 
-// JSONパーサー（ファイルアップロード前に設定）
-app.use(express.json());
+// デバッグ用: すべてのルートをログ出力（APIルートより前に配置）
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  next();
+});
 
-// デバッグエンドポイント（API ルートより前に配置）
+// デバッグエンドポイント（APIルートより前に配置）
 app.get('/api/debug/ffmpeg', async (req, res) => {
   try {
     const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
@@ -55,7 +61,6 @@ app.get('/api/debug/ffmpeg', async (req, res) => {
   }
 });
 
-// FFmpeg詳細情報エンドポイント
 app.get('/api/debug/ffmpeg-info', async (req, res) => {
   try {
     const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
@@ -80,9 +85,31 @@ app.get('/api/debug/ffmpeg-info', async (req, res) => {
   }
 });
 
-// API ルートの登録
+app.get('/api/debug/files', (req, res) => {
+  const videosDir = path.join(__dirname, '../storage/videos');
+  const thumbnailsDir = path.join(__dirname, '../storage/thumbnails');
+  
+  const result = {
+    directories: {
+      videos: {
+        path: videosDir,
+        exists: fs.existsSync(videosDir),
+        files: fs.existsSync(videosDir) ? fs.readdirSync(videosDir) : []
+      },
+      thumbnails: {
+        path: thumbnailsDir,
+        exists: fs.existsSync(thumbnailsDir),
+        files: fs.existsSync(thumbnailsDir) ? fs.readdirSync(thumbnailsDir) : []
+      }
+    }
+  };
+  
+  res.json(result);
+});
+
+// API ルートの登録（1回のみ）
 app.use('/api/videos', videoRoutes);
-app.use('/api/thumbnails', thumbnailRoutes);  // 追加
+app.use('/api/thumbnails', thumbnailRoutes);
 
 // メインページ
 app.get('/', (req, res) => {
@@ -101,12 +128,6 @@ app.get('/', (req, res) => {
       </html>
     `);
   }
-});
-
-// デバッグ用: すべてのルートをログ出力
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  next();
 });
 
 // エラーハンドリング
@@ -146,7 +167,7 @@ app._router.stack.forEach((middleware: any) => {
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:3000`);
   console.log(`📁 Client directory: ${path.join(__dirname, '../../client')}`);
-  console.log(`📁 Storage directory: ${path.join(__dirname, '../../storage')}`);
+  console.log(`📁 Storage directory: ${path.join(__dirname, '../storage')}`);
 });
 
 export default app;

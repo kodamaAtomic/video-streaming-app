@@ -40,3 +40,17 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+client/
+storage/
+*.mp4
+*.avi
+*.mkv
+*.mov
+*.wmv
+*.flv
+*.webm
+*.png
+*.jpg
+*.jpeg
+*.gif

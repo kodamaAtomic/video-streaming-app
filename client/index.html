@@ -3,96 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Streaming App - Test</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #1a1a1a;
-            color: white;
-        }
-        .status {
-            background-color: #2a2a2a;
-            padding: 20px;
-            border-radius: 5px;
-            margin: 20px 0;
-        }
-        .error {
-            background-color: #f44336;
-        }
-        .success {
-            background-color: #4CAF50;
-        }
-    </style>
+    <title>Video Streaming App</title>
+    <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <h1>Video Streaming App</h1>
-            <div class="upload-section">
-                <input type="file" id="videoUpload" accept="video/*" multiple>
-                <button id="uploadBtn">Upload Videos</button>
+        <h1>Video Streaming App</h1>
+        
+        <!-- ビデオアップロード部分 -->
+        <div id="upload-section">
+            <h2>ビデオをアップロード</h2>
+            <input type="file" id="video-upload" accept="video/*">
+            <button onclick="uploadVideo()">アップロード</button>
+            <div id="upload-progress"></div>
+        </div>
+        
+        <!-- デバッグ情報 -->
+        <div id="debug-section">
+            <button onclick="runThumbnailTests()">自己テスト実行</button>
+            <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>
+        </div>
+        
+        <!-- サムネイルグリッド -->
+        <div id="thumbnail-section">
+            <h2>ビデオ一覧</h2>
+            <div id="thumbnail-grid">
+                <p>ロード中...</p>
             </div>
-        </header>
-
-        <main class="main-content">
-            <div class="video-player-container" id="videoPlayerContainer" style="display: none;">
-                <video id="videoPlayer" controls>
+        </div>
+        
+        <!-- ビデオプレイヤー -->
+        <div id="video-section">
+            <h2>ビデオプレイヤー</h2>
+            <div class="video-player">
+                <video id="video-player" controls>
                     Your browser does not support the video tag.
                 </video>
-                <div class="video-info">
-                    <h3 id="videoTitle">Video Title</h3>
-                    <button id="closePlayer">Close Player</button>
-                </div>
             </div>
-
-            <div class="video-grid" id="videoGrid">
-                <div class="loading">Loading videos...</div>
-            </div>
-        </main>
-
-        <div class="status" id="status">
-            <h3>System Status</h3>
-            <p>Checking server connection...</p>
         </div>
     </div>
 
-    <script src="js/app.js"></script>
-    <script src="js/videoPlayer.js"></script>
-    <script src="js/thumbnailGrid.js"></script>
-    <script>
-        async function checkStatus() {
-            const statusDiv = document.getElementById('status');
-            try {
-                const response = await fetch('/api/videos');
-                const result = await response.json();
-                
-                if (result.success) {
-                    statusDiv.className = 'status success';
-                    statusDiv.innerHTML = `
-                        <h3>✅ Server is running!</h3>
-                        <p>Videos loaded: ${result.data.length}</p>
-                        <p>Message: ${result.message || 'Ready'}</p>
-                    `;
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (error) {
-                statusDiv.className = 'status error';
-                statusDiv.innerHTML = `
-                    <h3>❌ Server Error</h3>
-                    <p>Error: ${error.message}</p>
-                    <p>Please check the console for more details.</p>
-                `;
-            }
-        }
-
-        // ページ読み込み時とその後定期的にチェック
-        checkStatus();
-        setInterval(checkStatus, 5000);
-    </script>
+    <!-- メインJavaScriptファイルのみ読み込み -->
+    <script src="/js/main.js"></script>
 </body>
 </html>

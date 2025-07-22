@@ -12,9 +12,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+    "declaration": false,
+    "removeComments": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": [
     "src/**/*"
@@ -22,6 +23,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "**/*.test.ts"
+    "client",
+    "src/client/**/*"
   ]
 }
