@@ -68,16 +68,6 @@ h1 {
     padding: 20px;
 }
 
-/* ヘッダーセクション */
-.header {
-    background: var(--bg-secondary);
-    border-radius: 15px;
-    padding: 30px;
-    margin-bottom: 30px;
-    box-shadow: 0 8px 32px var(--shadow-light);
-    border: 1px solid var(--border-color);
-}
-
 /* アップロードセクション */
 #upload-section {
     background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
@@ -139,29 +129,70 @@ h1 {
     color: var(--accent-primary);
 }
 
-/* デバッグセクション */
-#debug-section {
+/* コントロールセクション */
+#control-section {
     background: var(--bg-secondary);
-    border-radius: 10px;
-    padding: 15px;
+    border-radius: 15px;
+    padding: 20px;
     margin-bottom: 30px;
-    text-align: center;
     border: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
 }
 
-#debug-section button {
+.view-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.view-controls label {
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-right: 10px;
+}
+
+.view-btn {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    padding: 10px 20px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.view-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    transform: translateY(-2px);
+}
+
+.view-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+.debug-controls button {
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     border: 1px solid var(--border-color);
     padding: 8px 15px;
     border-radius: 5px;
     cursor: pointer;
-    margin: 5px;
+    margin: 0 5px;
     font-size: 12px;
     transition: all 0.3s ease;
 }
 
-#debug-section button:hover {
+.debug-controls button:hover {
     background: var(--accent-primary);
     color: white;
     border-color: var(--accent-primary);
@@ -179,12 +210,63 @@ h1 {
     text-align: center;
 }
 
-/* サムネイルグリッド */
+/* サムネイルグリッド - サイズ別 */
 #thumbnail-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 25px;
+    gap: 20px;
     padding: 20px 0;
+    transition: all 0.3s ease;
+}
+
+/* 24個表示 (大サイズ) */
+.grid-24 {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.grid-24 .thumbnail img {
+    height: 180px;
+}
+
+.grid-24 .thumbnail p {
+    font-size: 14px;
+    padding: 15px;
+}
+
+/* 48個表示 (中サイズ) */
+.grid-48 {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 15px;
+}
+
+.grid-48 .thumbnail img {
+    height: 140px;
+}
+
+.grid-48 .thumbnail p {
+    font-size: 12px;
+    padding: 12px;
+}
+
+/* 96個表示 (小サイズ) */
+.grid-96 {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+}
+
+.grid-96 .thumbnail img {
+    height: 100px;
+}
+
+.grid-96 .thumbnail p {
+    font-size: 11px;
+    padding: 8px;
+}
+
+.grid-96 .thumbnail button {
+    padding: 4px 8px;
+    font-size: 10px;
+    top: 5px;
+    right: 5px;
 }
 
 .thumbnail {
@@ -206,7 +288,6 @@ h1 {
 
 .thumbnail img {
     width: 100%;
-    height: 200px;
     object-fit: cover;
     display: block;
     transition: transform 0.3s ease;
@@ -217,39 +298,44 @@ h1 {
 }
 
 .thumbnail p {
-    padding: 20px;
     margin: 0;
     font-weight: 600;
     color: var(--text-primary);
     text-align: center;
     background: var(--bg-secondary);
-    font-size: 14px;
     border-top: 1px solid var(--border-color);
+    word-wrap: break-word;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .thumbnail-placeholder {
     width: 100%;
-    height: 200px;
     background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
     display: flex;
     align-items: center;
     justify-content: center;
     border: 2px dashed var(--border-color);
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 500;
 }
+
+.grid-24 .thumbnail-placeholder { height: 180px; }
+.grid-48 .thumbnail-placeholder { height: 140px; }
+.grid-96 .thumbnail-placeholder { height: 100px; }
 
 /* 削除ボタンのスタイリング */
 .thumbnail button {
     position: absolute;
-    top: 10px;
-    right: 10px;
+    top: 8px;
+    right: 8px;
     background: rgba(220, 53, 69, 0.9);
     color: white;
     border: none;
-    border-radius: 20px;
-    padding: 8px 12px;
+    border-radius: 15px;
+    padding: 6px 10px;
     cursor: pointer;
     font-size: 11px;
     font-weight: 600;
@@ -270,36 +356,69 @@ h1 {
     box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
 }
 
-/* ビデオプレイヤーセクション */
-#video-section {
+/* モーダルプレイヤー */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    position: relative;
+    margin: 2% auto;
+    width: 90%;
+    max-width: 1000px;
     background: var(--bg-secondary);
     border-radius: 15px;
-    padding: 30px;
-    box-shadow: 0 8px 32px var(--shadow-light);
+    box-shadow: 0 20px 60px var(--shadow-heavy);
     border: 1px solid var(--border-color);
-}
-
-#video-section h2 {
-    color: var(--text-primary);
-    margin-bottom: 20px;
-    text-align: center;
-}
-
-.video-player {
-    width: 100%;
-    max-width: 900px;
-    margin: 0 auto;
-    border-radius: 15px;
     overflow: hidden;
-    box-shadow: 0 8px 32px var(--shadow-heavy);
-    border: 1px solid var(--border-color);
 }
 
-.video-player video {
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+    color: var(--text-primary);
+    margin: 0;
+    font-size: 1.2rem;
+}
+
+.close-btn {
+    color: var(--text-muted);
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 10px;
+    transition: color 0.3s ease;
+}
+
+.close-btn:hover {
+    color: var(--accent-primary);
+    transform: scale(1.1);
+}
+
+.modal-body {
+    padding: 0;
+}
+
+.modal video {
     width: 100%;
     height: auto;
     background: #000;
-    display: block;
+    outline: none;
 }
 
 /* ローディングメッセージ */
@@ -324,34 +443,42 @@ h1 {
         font-size: 2rem;
     }
     
-    #thumbnail-grid {
-        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-        gap: 20px;
+    #control-section {
+        flex-direction: column;
+        gap: 15px;
     }
     
-    .thumbnail img {
-        height: 150px;
+    .grid-24 {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     }
     
-    #upload-section,
-    .header,
-    #video-section {
-        padding: 20px;
+    .grid-48 {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+    
+    .grid-96 {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
     }
 }
 
 @media (max-width: 480px) {
-    #thumbnail-grid {
-        grid-template-columns: 1fr;
-        gap: 15px;
-    }
-    
-    .thumbnail img {
-        height: 180px;
+    .grid-24,
+    .grid-48,
+    .grid-96 {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     }
     
     h1 {
         font-size: 1.8rem;
+    }
+    
+    .view-controls {
+        flex-wrap: wrap;
     }
 }
 
@@ -367,8 +494,23 @@ h1 {
     }
 }
 
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 .thumbnail {
     animation: fadeIn 0.5s ease-out;
+}
+
+.modal-content {
+    animation: modalFadeIn 0.3s ease-out;
 }
 
 /* スクロールバーのスタイリング */

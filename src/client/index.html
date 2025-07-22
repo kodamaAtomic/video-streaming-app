@@ -18,24 +18,37 @@
             <div id="upload-progress"></div>
         </div>
         
-        <!-- デバッグ情報 -->
-        <div id="debug-section">
-            <button onclick="runThumbnailTests()">自己テスト実行</button>
-            <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>
+        <!-- コントロールセクション -->
+        <div id="control-section">
+            <div class="view-controls">
+                <label>表示数:</label>
+                <button class="view-btn active" data-count="24">24</button>
+                <button class="view-btn" data-count="48">48</button>
+                <button class="view-btn" data-count="96">96</button>
+            </div>
+            <div class="debug-controls">
+                <button onclick="runThumbnailTests()">自己テスト実行</button>
+                <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>
+            </div>
         </div>
         
         <!-- サムネイルグリッド -->
         <div id="thumbnail-section">
             <h2>ビデオ一覧</h2>
-            <div id="thumbnail-grid">
+            <div id="thumbnail-grid" class="grid-24">
                 <p>ロード中...</p>
             </div>
         </div>
-        
-        <!-- ビデオプレイヤー -->
-        <div id="video-section">
-            <h2>ビデオプレイヤー</h2>
-            <div class="video-player">
+    </div>
+
+    <!-- モーダルビデオプレイヤー -->
+    <div id="video-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-video-title">Video Title</h3>
+                <span class="close-btn" onclick="closeVideoPlayer()">&times;</span>
+            </div>
+            <div class="modal-body">
                 <video id="video-player" controls>
                     Your browser does not support the video tag.
                 </video>
@@ -43,7 +56,7 @@
         </div>
     </div>
 
-    <!-- メインJavaScriptファイルのみ読み込み -->
+    <!-- メインJavaScriptファイル -->
     <script src="/js/main.js"></script>
 </body>
 </html>
