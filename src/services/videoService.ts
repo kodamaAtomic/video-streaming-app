@@ -9,9 +9,13 @@ export default class VideoService {
   private readonly thumbnailGenerator: ThumbnailGenerator;
   private videos: Map<string, VideoMetadata> = new Map();
 
-  constructor(videoDir: string = path.join(__dirname, '../../storage/videos')) {
-    this.videoDir = videoDir;
-    this.thumbnailGenerator = new ThumbnailGenerator();
+  constructor(videoDir?: string) {
+    // dist配下のstorageに統一
+    this.videoDir = videoDir || path.join(__dirname, '../storage/videos');
+    // ThumbnailGeneratorにも同じくdist配下のパスを渡す
+    this.thumbnailGenerator = new ThumbnailGenerator(path.join(__dirname, '../storage/thumbnails'));
+    console.log(`Video directory set to: ${this.videoDir}`);
+    console.log(`Current __dirname: ${__dirname}`);
     this.initializeVideoDir();
     this.loadVideos();
   }
@@ -19,6 +23,7 @@ export default class VideoService {
   private async initializeVideoDir(): Promise<void> {
     try {
       await fs.access(this.videoDir);
+      console.log(`Video directory exists: ${this.videoDir}`);
     } catch {
       await fs.mkdir(this.videoDir, { recursive: true });
       console.log(`Created video directory: ${this.videoDir}`);
@@ -31,6 +36,13 @@ export default class VideoService {
       if (!fsSynce.existsSync(this.videoDir)) {
         await fs.mkdir(this.videoDir, { recursive: true });
         console.log('No videos directory found, created empty directory');
+        return;
+      }
+
+      // ディレクトリの情報を確認
+      const stats = await fs.stat(this.videoDir);
+      if (!stats.isDirectory()) {
+        console.error(`Path is not a directory: ${this.videoDir}`);
         return;
       }
 

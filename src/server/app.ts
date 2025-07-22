@@ -5,6 +5,7 @@ import compression from 'compression';
 import path from 'path';
 import fs from 'fs';
 import { videoRoutes } from './routes/videos';
+import { thumbnailRoutes } from './routes/thumbnails';  // 追加
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,11 +14,11 @@ const PORT = process.env.PORT || 3000;
 console.log('Starting server...');
 console.log('Current directory:', __dirname);
 
-// 必要なディレクトリを作成
+// 必要なディレクトリを作成（dist配下に統一）
 const requiredDirs = [
-  path.join(__dirname, '../../storage'),
-  path.join(__dirname, '../../storage/videos'),
-  path.join(__dirname, '../../storage/thumbnails'),
+  path.join(__dirname, '../storage'),
+  path.join(__dirname, '../storage/videos'),
+  path.join(__dirname, '../storage/thumbnails'),
   path.join(__dirname, '../../client')
 ];
 
@@ -37,13 +38,51 @@ app.use(compression());
 
 // 静的ファイルの提供
 app.use(express.static(path.join(__dirname, '../../client')));
-app.use('/storage', express.static(path.join(__dirname, '../../storage')));
+app.use('/storage', express.static(path.join(__dirname, '../storage')));
 
 // JSONパーサー（ファイルアップロード前に設定）
 app.use(express.json());
 
+// デバッグエンドポイント（API ルートより前に配置）
+app.get('/api/debug/ffmpeg', async (req, res) => {
+  try {
+    const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
+    const generator = new ThumbnailGenerator();
+    const result = await generator.testFFmpeg();
+    res.json({ success: result, message: result ? 'FFmpeg working' : 'FFmpeg not working' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
+  }
+});
+
+// FFmpeg詳細情報エンドポイント
+app.get('/api/debug/ffmpeg-info', async (req, res) => {
+  try {
+    const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
+    const generator = new ThumbnailGenerator();
+    
+    const testResult = await generator.simpleFFmpegTest();
+    
+    res.json({
+      test: testResult,
+      ffmpegStatic: require('ffmpeg-static'),
+      systemPaths: {
+        '/usr/bin/ffmpeg': fs.existsSync('/usr/bin/ffmpeg'),
+        '/usr/local/bin/ffmpeg': fs.existsSync('/usr/local/bin/ffmpeg'),
+        '/opt/homebrew/bin/ffmpeg': fs.existsSync('/opt/homebrew/bin/ffmpeg')
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    });
+  }
+});
+
 // API ルートの登録
 app.use('/api/videos', videoRoutes);
+app.use('/api/thumbnails', thumbnailRoutes);  // 追加
 
 // メインページ
 app.get('/', (req, res) => {
@@ -90,43 +129,6 @@ app.use((req, res) => {
   });
 });
 
-// デバッグ用エンドポイント
-app.get('/api/debug/ffmpeg', async (req, res) => {
-  try {
-    const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
-    const generator = new ThumbnailGenerator();
-    const result = await generator.testFFmpeg();
-    res.json({ success: result, message: result ? 'FFmpeg working' : 'FFmpeg not working' });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
-  }
-});
-
-// FFmpeg詳細情報エンドポイント
-app.get('/api/debug/ffmpeg-info', async (req, res) => {
-  try {
-    const ThumbnailGenerator = (await import('../services/thumbnailGenerator')).default;
-    const generator = new ThumbnailGenerator();
-    
-    const testResult = await generator.simpleFFmpegTest();
-    
-    res.json({
-      test: testResult,
-      ffmpegStatic: require('ffmpeg-static'),
-      systemPaths: {
-        '/usr/bin/ffmpeg': require('fs').existsSync('/usr/bin/ffmpeg'),
-        '/usr/local/bin/ffmpeg': require('fs').existsSync('/usr/local/bin/ffmpeg'),
-        '/opt/homebrew/bin/ffmpeg': require('fs').existsSync('/opt/homebrew/bin/ffmpeg')
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    });
-  }
-});
-
 // ルート確認用の追加
 console.log('Registered routes:');
 app._router.stack.forEach((middleware: any) => {
@@ -142,7 +144,7 @@ app._router.stack.forEach((middleware: any) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+  console.log(`✅ Server running on http://localhost:3000`);
   console.log(`📁 Client directory: ${path.join(__dirname, '../../client')}`);
   console.log(`📁 Storage directory: ${path.join(__dirname, '../../storage')}`);
 });
