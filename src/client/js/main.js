@@ -56,6 +56,23 @@ const VideoApp = {
             });
         });
         
+        // フォルダ操作ボタン
+        const folderSelectBtn = document.getElementById('folder-select-btn');
+        const folderChangeBtn = document.getElementById('folder-change-btn');
+        const uploadSelectedBtn = document.getElementById('upload-selected-btn');
+
+        if (folderSelectBtn) {
+            folderSelectBtn.addEventListener('click', () => this.selectVideoFolder());
+        }
+
+        if (folderChangeBtn) {
+            folderChangeBtn.addEventListener('click', () => this.changeVideoFolder());
+        }
+
+        if (uploadSelectedBtn) {
+            uploadSelectedBtn.addEventListener('click', () => this.uploadSelectedFiles());
+        }
+        
         // モーダルの外側クリックで閉じる
         this.elements.videoModal.addEventListener('click', (e) => {
             if (e.target === this.elements.videoModal) {
@@ -143,52 +160,105 @@ const VideoApp = {
     
     // サムネイル要素作成
     createThumbnailElement(video, index) {
-        console.log(`🖼️ Creating thumbnail ${index + 1}: ${video.thumbnailUrl}`);
+        console.log(`🖼️ Creating thumbnail ${index + 1}: ${video.thumbnailUrl || 'Browser file'}`);
         
         const thumbnailElement = document.createElement('div');
         thumbnailElement.className = 'thumbnail';
         thumbnailElement.style.position = 'relative';
         
-        // 画像要素
-        const img = document.createElement('img');
-        img.src = video.thumbnailUrl;
-        img.alt = video.title;
-        img.style.display = 'block';
-        
-        // タイトル要素
-        const title = document.createElement('p');
-        title.textContent = video.title;
-        
-        // 削除ボタン
-        const deleteButton = document.createElement('button');
-        deleteButton.textContent = '削除';
-        deleteButton.onclick = (e) => {
-            e.stopPropagation();
-            this.deleteVideo(video.id);
-        };
-        
-        // 画像ロードイベント
-        img.onload = () => {
-            console.log(`✅ Thumbnail loaded: ${video.thumbnailUrl}`);
-        };
-        
-        img.onerror = () => {
-            console.error(`❌ Failed to load thumbnail: ${video.thumbnailUrl}`);
+        // ブラウザ選択ファイルの場合
+        if (video.isBrowserFile) {
+            // プレースホルダー画像
             const placeholder = document.createElement('div');
-            placeholder.className = 'thumbnail-placeholder';
-            placeholder.textContent = 'サムネイル読み込み失敗';
-            img.parentNode.replaceChild(placeholder, img);
-        };
-        
-        // 要素組み立て
-        thumbnailElement.appendChild(img);
-        thumbnailElement.appendChild(title);
-        thumbnailElement.appendChild(deleteButton);
-        
-        // クリックイベント（モーダルで再生）
-        thumbnailElement.addEventListener('click', () => {
-            this.openVideoPlayer(video);
-        });
+            placeholder.className = 'thumbnail-placeholder browser-file';
+            placeholder.style.cssText = `
+                width: 100%;
+                height: 120px;
+                background: linear-gradient(135deg, #6c757d, #495057);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                color: white;
+                font-size: 18px;
+                border-radius: 8px;
+                cursor: pointer;
+            `;
+            placeholder.innerHTML = '🎬<br>ブラウザ<br>ファイル';
+            
+            // タイトル要素
+            const title = document.createElement('p');
+            title.textContent = video.originalName;
+            title.style.cssText = `
+                margin: 8px 0;
+                font-size: 12px;
+                color: var(--text-primary);
+                text-align: center;
+                word-break: break-all;
+            `;
+            
+            // ファイル情報
+            const fileInfo = document.createElement('p');
+            const sizeInMB = (video.size / (1024 * 1024)).toFixed(1);
+            fileInfo.textContent = `${sizeInMB} MB`;
+            fileInfo.style.cssText = `
+                margin: 4px 0;
+                font-size: 10px;
+                color: var(--text-muted);
+                text-align: center;
+            `;
+            
+            thumbnailElement.appendChild(placeholder);
+            thumbnailElement.appendChild(title);
+            thumbnailElement.appendChild(fileInfo);
+            
+            // クリックイベント（ブラウザファイルは再生不可の通知）
+            thumbnailElement.addEventListener('click', () => {
+                alert('ブラウザで選択されたファイルは直接再生できません。\nサーバーにアップロードしてから再生してください。');
+            });
+            
+        } else {
+            // 通常のサーバーファイル
+            // 画像要素
+            const img = document.createElement('img');
+            img.src = video.thumbnailUrl;
+            img.alt = video.title || video.originalName;
+            img.style.display = 'block';
+            
+            // タイトル要素
+            const title = document.createElement('p');
+            title.textContent = video.title || video.originalName;
+            
+            // 削除ボタン
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = '削除';
+            deleteButton.onclick = (e) => {
+                e.stopPropagation();
+                this.deleteVideo(video.id);
+            };
+            
+            // 画像ロードイベント
+            img.onload = () => {
+                console.log(`✅ Thumbnail loaded: ${video.thumbnailUrl}`);
+            };
+            
+            img.onerror = () => {
+                console.error(`❌ Failed to load thumbnail: ${video.thumbnailUrl}`);
+                const placeholder = document.createElement('div');
+                placeholder.className = 'thumbnail-placeholder';
+                placeholder.textContent = 'サムネイル読み込み失敗';
+                img.parentNode.replaceChild(placeholder, img);
+            };
+            
+            // 要素組み立て
+            thumbnailElement.appendChild(img);
+            thumbnailElement.appendChild(title);
+            thumbnailElement.appendChild(deleteButton);
+            
+            // クリックイベント（モーダルで再生）
+            thumbnailElement.addEventListener('click', () => {
+                this.openVideoPlayer(video);
+            });
+        }
         
         this.elements.thumbnailGrid.appendChild(thumbnailElement);
     },
@@ -297,17 +367,119 @@ const VideoApp = {
 
     // フォルダ変更機能
     async changeVideoFolder() {
-        const folderPathInput = document.getElementById('folder-path');
+        const selectedFolderPath = document.getElementById('selected-folder-path');
         const folderStatus = document.getElementById('folder-status');
         
-        if (!folderPathInput || !folderStatus) {
+        if (!selectedFolderPath || !folderStatus) {
             console.error('Folder controls not found');
             return;
         }
 
-        const folderPath = folderPathInput.value.trim();
+        console.log('=== Debug changeVideoFolder ===');
+        console.log('folderHandle:', selectedFolderPath.dataset.folderHandle);
+        console.log('fallbackFiles:', selectedFolderPath.dataset.fallbackFiles);
+        console.log('folderPath:', selectedFolderPath.dataset.folderPath);
+        console.log('videoFiles:', selectedFolderPath.dataset.videoFiles);
+
+        // ブラウザで選択されたフォルダの場合
+        if (selectedFolderPath.dataset.folderHandle === 'browser-directory') {
+            try {
+                folderStatus.innerHTML = '<span style="color: blue;">ブラウザ選択フォルダを処理中...</span>';
+                
+                const videoFiles = JSON.parse(selectedFolderPath.dataset.videoFiles || '[]');
+                console.log('Processing browser directory with files:', videoFiles);
+                
+                // アップロードボタンを表示
+                const uploadBtn = document.getElementById('upload-selected-btn');
+                if (uploadBtn) {
+                    uploadBtn.style.display = 'inline-block';
+                    uploadBtn.disabled = false;
+                }
+                
+                const response = await fetch('/api/videos/change-folder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        mode: 'browser-selection',
+                        videoFiles: videoFiles 
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    folderStatus.innerHTML = '<span style="color: green;">✅ ブラウザ選択フォルダの処理完了<br>📤 「選択ファイルをアップロード」ボタンでファイルを転送できます</span>';
+                    console.log('Browser folder processed successfully:', result.data);
+                    
+                    // サムネイル情報を直接更新（ブラウザ選択モードでは既にファイル情報があるため）
+                    await this.updateThumbnailsFromBrowserFiles(videoFiles);
+                    
+                    setTimeout(() => {
+                        folderStatus.innerHTML = '';
+                    }, 5000);
+                } else {
+                    folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
+                }
+            } catch (error) {
+                console.error('Browser folder change error:', error);
+                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+            }
+            return;
+        }
+
+        // フォールバックファイル選択の場合
+        if (selectedFolderPath.dataset.fallbackFiles) {
+            try {
+                folderStatus.innerHTML = '<span style="color: blue;">選択されたファイルを処理中...</span>';
+                
+                const fallbackFiles = JSON.parse(selectedFolderPath.dataset.fallbackFiles);
+                
+                // アップロードボタンを表示
+                const uploadBtn = document.getElementById('upload-selected-btn');
+                if (uploadBtn) {
+                    uploadBtn.style.display = 'inline-block';
+                    uploadBtn.disabled = false;
+                }
+                
+                const response = await fetch('/api/videos/change-folder', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        mode: 'fallback-files',
+                        videoFiles: fallbackFiles 
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    folderStatus.innerHTML = '<span style="color: green;">✅ ファイル選択の処理完了<br>📤 「選択ファイルをアップロード」ボタンでファイルを転送できます</span>';
+                    console.log('Fallback files processed successfully:', result.data);
+                    
+                    // サムネイル情報を直接更新
+                    await this.updateThumbnailsFromBrowserFiles(fallbackFiles);
+                    
+                    setTimeout(() => {
+                        folderStatus.innerHTML = '';
+                    }, 5000);
+                } else {
+                    folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
+                }
+            } catch (error) {
+                console.error('Fallback files change error:', error);
+                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+            }
+            return;
+        }
+
+        // 従来のサーバーフォルダパス処理
+        const folderPath = selectedFolderPath.dataset.folderPath;
         if (!folderPath) {
-            folderStatus.innerHTML = '<span style="color: red;">フォルダパスを入力してください</span>';
+            folderStatus.innerHTML = '<span style="color: red;">フォルダが選択されていません</span>';
             return;
         }
 
@@ -331,7 +503,6 @@ const VideoApp = {
                 // サムネイルを再読み込み
                 await this.fetchThumbnails();
                 
-                // ステータス表示を少し遅らせてクリア
                 setTimeout(() => {
                     folderStatus.innerHTML = '';
                 }, 3000);
@@ -342,6 +513,350 @@ const VideoApp = {
             console.error('Change folder error:', error);
             folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
         }
+    },
+
+    // 選択されたファイルをサーバーにアップロード
+    async uploadSelectedFiles() {
+        const selectedFolderPath = document.getElementById('selected-folder-path');
+        const folderStatus = document.getElementById('folder-status');
+        
+        if (!selectedFolderPath || !folderStatus) {
+            console.error('Folder controls not found');
+            return;
+        }
+
+        let filesToUpload = [];
+        let fileObjects = [];
+
+        try {
+            // ブラウザ選択フォルダの場合（File System Access API）
+            if (selectedFolderPath.dataset.folderHandle === 'browser-directory') {
+                const directoryHandle = window.selectedDirectoryHandle;
+                
+                if (!directoryHandle) {
+                    folderStatus.innerHTML = '<span style="color: red;">❌ フォルダが再選択されていません。フォルダを再選択してください。</span>';
+                    return;
+                }
+                
+                folderStatus.innerHTML = '<span style="color: blue;">🔄 File System Access APIからファイルを取得中...</span>';
+                
+                // File System Access APIからファイルオブジェクトを取得
+                for await (const [name, handle] of directoryHandle.entries()) {
+                    if (handle.kind === 'file') {
+                        const ext = name.toLowerCase().split('.').pop();
+                        if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext)) {
+                            const file = await handle.getFile();
+                            fileObjects.push(file);
+                        }
+                    }
+                }
+            }
+            // フォールバックファイル選択の場合
+            else if (selectedFolderPath.dataset.fallbackFiles) {
+                // webkitdirectoryの場合、ファイルオブジェクトは既に保存されていない
+                // ユーザーに再選択を促す
+                folderStatus.innerHTML = '<span style="color: orange;">⚠️ フォールバックモードでは再度ファイルを選択してください</span>';
+                this.showFallbackFileUploader();
+                return;
+            }
+
+            if (fileObjects.length === 0) {
+                folderStatus.innerHTML = '<span style="color: orange;">アップロード可能なビデオファイルが見つかりませんでした</span>';
+                return;
+            }
+
+            folderStatus.innerHTML = `<span style="color: blue;">📤 ${fileObjects.length}個のファイルをアップロード中...</span>`;
+            
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const [index, file] of fileObjects.entries()) {
+                try {
+                    folderStatus.innerHTML = `<span style="color: blue;">📤 ファイル ${index + 1}/${fileObjects.length}: ${file.name} をアップロード中...</span>`;
+                    
+                    const formData = new FormData();
+                    formData.append('video', file);
+                    
+                    const response = await fetch('/api/videos/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        successCount++;
+                        console.log(`✅ Uploaded: ${file.name}`);
+                    } else {
+                        errorCount++;
+                        console.error(`❌ Failed to upload: ${file.name}`, result.message);
+                    }
+                } catch (error) {
+                    errorCount++;
+                    console.error(`❌ Error uploading: ${file.name}`, error);
+                }
+            }
+
+            // 結果表示
+            if (errorCount === 0) {
+                folderStatus.innerHTML = `<span style="color: green;">✅ 全ての${successCount}個のファイルのアップロードが完了しました</span>`;
+            } else {
+                folderStatus.innerHTML = `<span style="color: orange;">⚠️ ${successCount}個成功、${errorCount}個失敗でアップロードが完了しました</span>`;
+            }
+
+            // サムネイルを再読み込み
+            await this.fetchThumbnails();
+            
+            setTimeout(() => {
+                folderStatus.innerHTML = '';
+            }, 5000);
+
+        } catch (error) {
+            console.error('Upload selected files error:', error);
+            folderStatus.innerHTML = `<span style="color: red;">❌ アップロードエラー: ${error.message}</span>`;
+        }
+    },
+
+    // フォールバックファイルアップローダー
+    showFallbackFileUploader() {
+        const folderStatus = document.getElementById('folder-status');
+        
+        // 隠しファイル入力を作成
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.webkitdirectory = true;
+        fileInput.multiple = true;
+        fileInput.accept = 'video/*';
+        fileInput.style.display = 'none';
+        
+        fileInput.addEventListener('change', async (event) => {
+            const files = Array.from(event.target.files);
+            const videoFiles = files.filter(file => {
+                const ext = file.name.toLowerCase().split('.').pop();
+                return ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext);
+            });
+
+            if (videoFiles.length > 0) {
+                folderStatus.innerHTML = `<span style="color: blue;">📤 ${videoFiles.length}個のファイルをアップロード中...</span>`;
+                
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (const [index, file] of videoFiles.entries()) {
+                    try {
+                        folderStatus.innerHTML = `<span style="color: blue;">📤 ファイル ${index + 1}/${videoFiles.length}: ${file.name} をアップロード中...</span>`;
+                        
+                        const formData = new FormData();
+                        formData.append('video', file);
+                        
+                        const response = await fetch('/api/videos/upload', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            successCount++;
+                            console.log(`✅ Uploaded: ${file.name}`);
+                        } else {
+                            errorCount++;
+                            console.error(`❌ Failed to upload: ${file.name}`, result.message);
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        console.error(`❌ Error uploading: ${file.name}`, error);
+                    }
+                }
+
+                // 結果表示
+                if (errorCount === 0) {
+                    folderStatus.innerHTML = `<span style="color: green;">✅ 全ての${successCount}個のファイルのアップロードが完了しました</span>`;
+                } else {
+                    folderStatus.innerHTML = `<span style="color: orange;">⚠️ ${successCount}個成功、${errorCount}個失敗でアップロードが完了しました</span>`;
+                }
+
+                // サムネイルを再読み込み
+                await this.fetchThumbnails();
+                
+                setTimeout(() => {
+                    folderStatus.innerHTML = '';
+                }, 5000);
+            } else {
+                folderStatus.innerHTML = '<span style="color: orange;">選択されたフォルダにビデオファイルが見つかりませんでした</span>';
+            }
+            
+            document.body.removeChild(fileInput);
+        });
+        
+        document.body.appendChild(fileInput);
+        fileInput.click();
+    },
+
+    // ブラウザで選択されたファイル情報からサムネイル表示を更新
+    async updateThumbnailsFromBrowserFiles(videoFiles) {
+        const thumbnailGrid = this.elements.thumbnailGrid;
+        if (!thumbnailGrid) return;
+
+        // ローディング表示
+        thumbnailGrid.innerHTML = '<p>ブラウザ選択ファイルを処理中...</p>';
+
+        try {
+            // ビデオファイル情報を表示用に変換
+            const videoItems = videoFiles.map((file, index) => {
+                return {
+                    id: `browser-${index}`,
+                    originalName: file.name,
+                    size: file.size,
+                    uploadDate: new Date(file.lastModified),
+                    thumbnailUrl: null, // ブラウザ選択ではサムネイル生成不可
+                    isBrowserFile: true
+                };
+            });
+
+            this.displayThumbnails(videoItems);
+            
+            console.log(`Displayed ${videoFiles.length} browser-selected video files`);
+        } catch (error) {
+            console.error('Error updating browser files display:', error);
+            thumbnailGrid.innerHTML = '<p>ファイル表示エラー</p>';
+        }
+    },
+
+    // フォルダ選択ダイアログ機能
+    async selectVideoFolder() {
+        const selectedFolderPath = document.getElementById('selected-folder-path');
+        const changeFolderBtn = document.getElementById('change-folder-btn');
+        const folderStatus = document.getElementById('folder-status');
+
+        // 既存のデータをクリア
+        selectedFolderPath.dataset.folderHandle = '';
+        selectedFolderPath.dataset.fallbackFiles = '';
+        selectedFolderPath.dataset.folderPath = '';
+        selectedFolderPath.dataset.videoFiles = '';
+
+        try {
+            // File System Access APIをサポートしているかチェック
+            if ('showDirectoryPicker' in window) {
+                console.log('🔄 Using File System Access API (Modern browsers)');
+                const directoryHandle = await window.showDirectoryPicker();
+                
+                // ディレクトリハンドルから実際のパスを取得（制限があるため代替方法を使用）
+                const folderName = directoryHandle.name;
+                
+                // 選択されたフォルダ名を表示（完全パスは取得できないため）
+                selectedFolderPath.textContent = `選択済み: ${folderName}`;
+                
+                // DirectoryHandleはグローバル変数に保存（シリアライズできないため）
+                window.selectedDirectoryHandle = directoryHandle;
+                
+                // ファイル一覧を取得してサーバーに送信する方法に変更
+                await this.handleDirectorySelection(directoryHandle);
+                
+                changeFolderBtn.disabled = false;
+                folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました（モダンAPI）</span>';
+                
+            } else {
+                // フォールバック: input[type="file"]を使用
+                console.log('🔄 Falling back to input file method (Legacy browsers)');
+                this.showFallbackFolderSelector();
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                folderStatus.innerHTML = '<span style="color: orange;">フォルダ選択がキャンセルされました</span>';
+            } else {
+                console.error('Folder selection error:', error);
+                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+            }
+        }
+    },
+
+    // Directory Handleを処理
+    async handleDirectorySelection(directoryHandle) {
+        try {
+            const videoFiles = [];
+            
+            // ディレクトリ内のファイルを列挙
+            for await (const [name, handle] of directoryHandle.entries()) {
+                if (handle.kind === 'file') {
+                    // ビデオファイルかチェック
+                    const ext = name.toLowerCase().split('.').pop();
+                    if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext)) {
+                        const file = await handle.getFile();
+                        videoFiles.push({
+                            name: file.name,
+                            size: file.size,
+                            lastModified: file.lastModified,
+                            type: file.type
+                        });
+                    }
+                }
+            }
+
+            console.log(`Found ${videoFiles.length} video files in selected directory`);
+            
+            // 選択されたフォルダの情報を保存
+            const selectedFolderPath = document.getElementById('selected-folder-path');
+            selectedFolderPath.dataset.videoFiles = JSON.stringify(videoFiles);
+            selectedFolderPath.dataset.folderHandle = 'browser-directory';
+            
+            console.log('Set folderHandle to:', selectedFolderPath.dataset.folderHandle);
+            console.log('Video files data:', selectedFolderPath.dataset.videoFiles);
+            
+        } catch (error) {
+            console.error('Error processing directory:', error);
+            throw error;
+        }
+    },
+
+    // フォールバック: ファイル選択
+    showFallbackFolderSelector() {
+        const folderStatus = document.getElementById('folder-status');
+        
+        // 隠しファイル入力を作成
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.webkitdirectory = true;
+        fileInput.multiple = true;
+        fileInput.style.display = 'none';
+        
+        fileInput.addEventListener('change', (event) => {
+            const files = Array.from(event.target.files);
+            const videoFiles = files.filter(file => {
+                const ext = file.name.toLowerCase().split('.').pop();
+                return ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext);
+            });
+
+            if (videoFiles.length > 0) {
+                const folderPath = videoFiles[0].webkitRelativePath.split('/')[0];
+                const selectedFolderPath = document.getElementById('selected-folder-path');
+                const changeFolderBtn = document.getElementById('change-folder-btn');
+                
+                selectedFolderPath.textContent = `選択済み: ${folderPath} (${videoFiles.length}個のビデオ)`;
+                selectedFolderPath.dataset.folderPath = folderPath;
+                selectedFolderPath.dataset.fallbackFiles = JSON.stringify(videoFiles.map(f => ({
+                    name: f.name,
+                    size: f.size,
+                    lastModified: f.lastModified,
+                    type: f.type,
+                    path: f.webkitRelativePath
+                })));
+                
+                console.log('Fallback folder selection set:');
+                console.log('- folderPath:', selectedFolderPath.dataset.folderPath);
+                console.log('- fallbackFiles:', selectedFolderPath.dataset.fallbackFiles);
+                
+                changeFolderBtn.disabled = false;
+                folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました（フォールバックモード）</span>';
+            } else {
+                folderStatus.innerHTML = '<span style="color: orange;">選択されたフォルダにビデオファイルが見つかりませんでした</span>';
+            }
+            
+            document.body.removeChild(fileInput);
+        });
+        
+        document.body.appendChild(fileInput);
+        fileInput.click();
     }
 };
 
@@ -355,6 +870,7 @@ window.uploadVideo = () => VideoApp.uploadVideo();
 window.debugFetchThumbnails = () => VideoApp.fetchThumbnails();
 window.closeVideoPlayer = () => VideoApp.closeVideoPlayer();
 window.changeVideoFolder = () => VideoApp.changeVideoFolder();
+window.selectVideoFolder = () => VideoApp.selectVideoFolder();
 window.runThumbnailTests = () => {
     console.log('🧪 Running thumbnail tests...');
     // テスト関数をここに実装

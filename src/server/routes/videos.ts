@@ -23,10 +23,21 @@ const storage = multer.diskStorage({
     cb(null, videoStorageDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const filename = `video-${uniqueSuffix}${path.extname(file.originalname)}`;
-    console.log(`Generated filename: ${filename}`);
-    cb(null, filename);
+    // 元のファイル名を保持し、重複する場合はタイムスタンプを追加
+    const originalName = file.originalname;
+    const filePath = path.join(videoStorageDir, originalName);
+    
+    if (fs.existsSync(filePath)) {
+      const uniqueSuffix = Date.now();
+      const ext = path.extname(originalName);
+      const baseName = path.basename(originalName, ext);
+      const filename = `${baseName}-${uniqueSuffix}${ext}`;
+      console.log(`File exists, using unique filename: ${filename}`);
+      cb(null, filename);
+    } else {
+      console.log(`Using original filename: ${originalName}`);
+      cb(null, originalName);
+    }
   }
 });
 

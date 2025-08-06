@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import VideoService from '../services/videoService';
 import path from 'path';
 import fs from 'fs';
+import multer from 'multer';
 
 interface ApiResponse {
   success: boolean;
@@ -229,12 +230,43 @@ export default class VideoController {
 
   async changeVideoFolder(req: Request, res: Response): Promise<void> {
     try {
-      const { folderPath } = req.body;
+      const { folderPath, videoFiles, mode } = req.body;
       
+      // ブラウザからのファイル情報が提供された場合
+      if ((mode === 'browser-selection' || mode === 'fallback-files') && videoFiles && Array.isArray(videoFiles)) {
+        console.log(`Processing ${mode}: ${videoFiles.length} videos`);
+        
+        // ファイル情報をログ出力
+        videoFiles.forEach((file, index) => {
+          console.log(`  ${index + 1}. ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`);
+        });
+        
+        // ブラウザ選択モードでの処理
+        const response: ApiResponse = {
+          success: true,
+          message: `${mode === 'browser-selection' ? 'ブラウザフォルダ' : 'ファイル'}選択が正常に処理されました`,
+          data: { 
+            mode: mode,
+            videoCount: videoFiles.length,
+            videos: videoFiles.map((file, index) => ({
+              id: `${mode}-${index}`,
+              originalName: file.name,
+              size: file.size,
+              lastModified: file.lastModified,
+              type: file.type,
+              isBrowserFile: true
+            }))
+          }
+        };
+        res.json(response);
+        return;
+      }
+
+      // 従来のサーバーフォルダパス処理
       if (!folderPath) {
         res.status(400).json({
           success: false,
-          message: 'Folder path is required'
+          message: 'Folder path or video files are required'
         });
         return;
       }

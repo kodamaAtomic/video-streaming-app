@@ -156,6 +156,62 @@ h1 {
     white-space: nowrap;
 }
 
+#folder-select-btn {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+#folder-select-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(40, 167, 69, 0.3);
+}
+
+.folder-path-display {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text-secondary);
+    font-family: monospace;
+    font-size: 14px;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#change-folder-btn {
+    background: linear-gradient(135deg, var(--accent-primary), #0056b3);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+#change-folder-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
+}
+
+#change-folder-btn:disabled {
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
 .folder-controls input[type="text"] {
     background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
@@ -192,6 +248,27 @@ h1 {
 #folder-status {
     min-height: 20px;
     font-size: 14px;
+}
+
+.thumbnail-placeholder.browser-file {
+    background: linear-gradient(135deg, #6c757d, #495057) !important;
+    border: 2px dashed var(--border-color);
+    position: relative;
+}
+
+.thumbnail-placeholder.browser-file::after {
+    content: '📁';
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    font-size: 12px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .view-controls {

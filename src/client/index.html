@@ -22,8 +22,10 @@
         <div id="control-section">
             <div class="folder-controls">
                 <label>フォルダ選択:</label>
-                <input type="text" id="folder-path" placeholder="/path/to/your/videos" style="width: 300px;">
-                <button onclick="changeVideoFolder()">フォルダ変更</button>
+                <button id="folder-select-btn" onclick="selectVideoFolder()">📁 フォルダを選択</button>
+                <span id="selected-folder-path" class="folder-path-display">フォルダが選択されていません</span>
+                <button id="change-folder-btn" onclick="changeVideoFolder()" disabled>フォルダ変更</button>
+                <button id="upload-selected-btn" onclick="uploadSelectedFiles()" disabled style="display: none;">選択ファイルをアップロード</button>
                 <div id="folder-status"></div>
             </div>
             <div class="view-controls">
