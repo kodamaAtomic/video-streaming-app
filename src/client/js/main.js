@@ -59,9 +59,6 @@ const VideoApp = {
         // フォルダ操作ボタン
         const folderSelectBtn = document.getElementById('folder-select-btn');
         const folderChangeBtn = document.getElementById('folder-change-btn');
-        const uploadSelectedBtn = document.getElementById('upload-selected-btn');
-        const localFolderBtn = document.getElementById('local-folder-btn');
-        const localFolderInput = document.getElementById('local-folder-input');
 
         if (folderSelectBtn) {
             folderSelectBtn.addEventListener('click', () => this.selectVideoFolder());
@@ -69,18 +66,6 @@ const VideoApp = {
 
         if (folderChangeBtn) {
             folderChangeBtn.addEventListener('click', () => this.changeVideoFolder());
-        }
-
-        if (uploadSelectedBtn) {
-            uploadSelectedBtn.addEventListener('click', () => this.uploadSelectedFiles());
-        }
-
-        if (localFolderBtn) {
-            localFolderBtn.addEventListener('click', () => this.selectLocalFolder());
-        }
-
-        if (localFolderInput) {
-            localFolderInput.addEventListener('change', (e) => this.handleLocalFolderSelection(e));
         }
         
         // モーダルの外側クリックで閉じる
@@ -170,105 +155,52 @@ const VideoApp = {
     
     // サムネイル要素作成
     createThumbnailElement(video, index) {
-        console.log(`🖼️ Creating thumbnail ${index + 1}: ${video.thumbnailUrl || 'Browser file'}`);
+        console.log(`🖼️ Creating thumbnail ${index + 1}: ${video.thumbnailUrl}`);
         
         const thumbnailElement = document.createElement('div');
         thumbnailElement.className = 'thumbnail';
         thumbnailElement.style.position = 'relative';
         
-        // ブラウザ選択ファイルの場合
-        if (video.isBrowserFile) {
-            // プレースホルダー画像
+        // 画像要素
+        const img = document.createElement('img');
+        img.src = video.thumbnailUrl;
+        img.alt = video.title || video.originalName;
+        img.style.display = 'block';
+        
+        // タイトル要素
+        const title = document.createElement('p');
+        title.textContent = video.title || video.originalName;
+        
+        // 削除ボタン
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = '削除';
+        deleteButton.onclick = (e) => {
+            e.stopPropagation();
+            this.deleteVideo(video.id);
+        };
+        
+        // 画像ロードイベント
+        img.onload = () => {
+            console.log(`✅ Thumbnail loaded: ${video.thumbnailUrl}`);
+        };
+        
+        img.onerror = () => {
+            console.error(`❌ Failed to load thumbnail: ${video.thumbnailUrl}`);
             const placeholder = document.createElement('div');
-            placeholder.className = 'thumbnail-placeholder browser-file';
-            placeholder.style.cssText = `
-                width: 100%;
-                height: 120px;
-                background: linear-gradient(135deg, #6c757d, #495057);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: white;
-                font-size: 18px;
-                border-radius: 8px;
-                cursor: pointer;
-            `;
-            placeholder.innerHTML = '🎬<br>ブラウザ<br>ファイル';
-            
-            // タイトル要素
-            const title = document.createElement('p');
-            title.textContent = video.originalName;
-            title.style.cssText = `
-                margin: 8px 0;
-                font-size: 12px;
-                color: var(--text-primary);
-                text-align: center;
-                word-break: break-all;
-            `;
-            
-            // ファイル情報
-            const fileInfo = document.createElement('p');
-            const sizeInMB = (video.size / (1024 * 1024)).toFixed(1);
-            fileInfo.textContent = `${sizeInMB} MB`;
-            fileInfo.style.cssText = `
-                margin: 4px 0;
-                font-size: 10px;
-                color: var(--text-muted);
-                text-align: center;
-            `;
-            
-            thumbnailElement.appendChild(placeholder);
-            thumbnailElement.appendChild(title);
-            thumbnailElement.appendChild(fileInfo);
-            
-            // クリックイベント（ブラウザファイルは再生不可の通知）
-            thumbnailElement.addEventListener('click', () => {
-                alert('ブラウザで選択されたファイルは直接再生できません。\nサーバーにアップロードしてから再生してください。');
-            });
-            
-        } else {
-            // 通常のサーバーファイル
-            // 画像要素
-            const img = document.createElement('img');
-            img.src = video.thumbnailUrl;
-            img.alt = video.title || video.originalName;
-            img.style.display = 'block';
-            
-            // タイトル要素
-            const title = document.createElement('p');
-            title.textContent = video.title || video.originalName;
-            
-            // 削除ボタン
-            const deleteButton = document.createElement('button');
-            deleteButton.textContent = '削除';
-            deleteButton.onclick = (e) => {
-                e.stopPropagation();
-                this.deleteVideo(video.id);
-            };
-            
-            // 画像ロードイベント
-            img.onload = () => {
-                console.log(`✅ Thumbnail loaded: ${video.thumbnailUrl}`);
-            };
-            
-            img.onerror = () => {
-                console.error(`❌ Failed to load thumbnail: ${video.thumbnailUrl}`);
-                const placeholder = document.createElement('div');
-                placeholder.className = 'thumbnail-placeholder';
-                placeholder.textContent = 'サムネイル読み込み失敗';
-                img.parentNode.replaceChild(placeholder, img);
-            };
-            
-            // 要素組み立て
-            thumbnailElement.appendChild(img);
-            thumbnailElement.appendChild(title);
-            thumbnailElement.appendChild(deleteButton);
-            
-            // クリックイベント（モーダルで再生）
-            thumbnailElement.addEventListener('click', () => {
-                this.openVideoPlayer(video);
-            });
-        }
+            placeholder.className = 'thumbnail-placeholder';
+            placeholder.textContent = 'サムネイル読み込み失敗';
+            img.parentNode.replaceChild(placeholder, img);
+        };
+        
+        // 要素組み立て
+        thumbnailElement.appendChild(img);
+        thumbnailElement.appendChild(title);
+        thumbnailElement.appendChild(deleteButton);
+        
+        // クリックイベント（モーダルで再生）
+        thumbnailElement.addEventListener('click', () => {
+            this.openVideoPlayer(video);
+        });
         
         this.elements.thumbnailGrid.appendChild(thumbnailElement);
     },
@@ -375,7 +307,7 @@ const VideoApp = {
         }
     },
 
-    // フォルダ変更機能（ワークフォルダとして設定）
+    // サーバー側の参照フォルダを切り替える機能
     async changeVideoFolder() {
         const selectedFolderPath = document.getElementById('selected-folder-path');
         const folderStatus = document.getElementById('folder-status');
@@ -386,16 +318,13 @@ const VideoApp = {
         }
 
         console.log('=== Debug changeVideoFolder ===');
-        console.log('folderHandle:', selectedFolderPath.dataset.folderHandle);
-        console.log('fallbackFiles:', selectedFolderPath.dataset.fallbackFiles);
-        console.log('folderPath:', selectedFolderPath.dataset.folderPath);
         console.log('realFolderPath:', selectedFolderPath.dataset.realFolderPath);
 
         // 実際のフォルダパスがある場合（ローカルフォルダ選択）
         const realFolderPath = selectedFolderPath.dataset.realFolderPath;
         if (realFolderPath) {
             try {
-                folderStatus.innerHTML = '<span style="color: blue;">🔄 ワークフォルダを変更中...</span>';
+                folderStatus.innerHTML = '<span style="color: blue;">🔄 サーバー参照フォルダを変更中...</span>';
                 
                 const response = await fetch('/api/videos/change-folder', {
                     method: 'POST',
@@ -411,14 +340,8 @@ const VideoApp = {
                 const result = await response.json();
 
                 if (result.success) {
-                    folderStatus.innerHTML = '<span style="color: green;">✅ ワークフォルダが変更されました</span>';
-                    console.log('Work folder changed successfully to:', result.data.newFolderPath);
-                    
-                    // アップロードボタンを非表示
-                    const uploadBtn = document.getElementById('upload-selected-btn');
-                    if (uploadBtn) {
-                        uploadBtn.style.display = 'none';
-                    }
+                    folderStatus.innerHTML = '<span style="color: green;">✅ サーバー参照フォルダが変更されました</span>';
+                    console.log('Server folder changed successfully to:', result.data.newFolderPath);
                     
                     // サムネイルを再読み込み
                     await this.fetchThumbnails();
@@ -430,421 +353,98 @@ const VideoApp = {
                     folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
                 }
             } catch (error) {
-                console.error('Work folder change error:', error);
+                console.error('Server folder change error:', error);
                 folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
             }
             return;
         }
 
-        // ブラウザで選択されたフォルダの場合（アップロードモード）
-        if (selectedFolderPath.dataset.folderHandle === 'browser-directory') {
-            try {
-                folderStatus.innerHTML = '<span style="color: blue;">ブラウザ選択フォルダを処理中...</span>';
-                
-                const videoFiles = JSON.parse(selectedFolderPath.dataset.videoFiles || '[]');
-                console.log('Processing browser directory with files:', videoFiles);
-                
-                // アップロードボタンを表示
-                const uploadBtn = document.getElementById('upload-selected-btn');
-                if (uploadBtn) {
-                    uploadBtn.style.display = 'inline-block';
-                    uploadBtn.disabled = false;
-                }
-                
-                const response = await fetch('/api/videos/change-folder', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        mode: 'browser-selection',
-                        videoFiles: videoFiles 
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    folderStatus.innerHTML = '<span style="color: green;">✅ ブラウザ選択フォルダの処理完了<br>📤 「選択ファイルをアップロード」ボタンでファイルを転送できます</span>';
-                    console.log('Browser folder processed successfully:', result.data);
-                    
-                    // サムネイル情報を直接更新（ブラウザ選択モードでは既にファイル情報があるため）
-                    await this.updateThumbnailsFromBrowserFiles(videoFiles);
-                    
-                    setTimeout(() => {
-                        folderStatus.innerHTML = '';
-                    }, 5000);
-                } else {
-                    folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
-                }
-            } catch (error) {
-                console.error('Browser folder change error:', error);
-                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
-            }
-            return;
-        }
-
-        // フォールバックファイル選択の場合
-        if (selectedFolderPath.dataset.fallbackFiles) {
-            try {
-                folderStatus.innerHTML = '<span style="color: blue;">選択されたファイルを処理中...</span>';
-                
-                const fallbackFiles = JSON.parse(selectedFolderPath.dataset.fallbackFiles);
-                
-                // アップロードボタンを表示
-                const uploadBtn = document.getElementById('upload-selected-btn');
-                if (uploadBtn) {
-                    uploadBtn.style.display = 'inline-block';
-                    uploadBtn.disabled = false;
-                }
-                
-                const response = await fetch('/api/videos/change-folder', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ 
-                        mode: 'fallback-files',
-                        videoFiles: fallbackFiles 
-                    })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    folderStatus.innerHTML = '<span style="color: green;">✅ ファイル選択の処理完了<br>📤 「選択ファイルをアップロード」ボタンでファイルを転送できます</span>';
-                    console.log('Fallback files processed successfully:', result.data);
-                    
-                    // サムネイル情報を直接更新
-                    await this.updateThumbnailsFromBrowserFiles(fallbackFiles);
-                    
-                    setTimeout(() => {
-                        folderStatus.innerHTML = '';
-                    }, 5000);
-                } else {
-                    folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
-                }
-            } catch (error) {
-                console.error('Fallback files change error:', error);
-                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
-            }
-            return;
-        }
-
-        // 従来のサーバーフォルダパス処理
-        const folderPath = selectedFolderPath.dataset.folderPath;
-        if (!folderPath) {
-            folderStatus.innerHTML = '<span style="color: red;">フォルダが選択されていません</span>';
-            return;
-        }
-
-        try {
-            folderStatus.innerHTML = '<span style="color: blue;">フォルダを変更中...</span>';
-            
-            const response = await fetch('/api/videos/change-folder', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ folderPath })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                folderStatus.innerHTML = '<span style="color: green;">✅ フォルダ変更完了</span>';
-                console.log('Folder changed successfully to:', result.data.newFolderPath);
-                
-                // サムネイルを再読み込み
-                await this.fetchThumbnails();
-                
-                setTimeout(() => {
-                    folderStatus.innerHTML = '';
-                }, 3000);
-            } else {
-                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
-            }
-        } catch (error) {
-            console.error('Change folder error:', error);
-            folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
-        }
+        // フォルダパスが設定されていない場合
+        folderStatus.innerHTML = '<span style="color: red;">❌ フォルダが選択されていません</span>';
     },
 
-    // 選択されたファイルをサーバーにアップロード
-    async uploadSelectedFiles() {
-        const selectedFolderPath = document.getElementById('selected-folder-path');
-        const folderStatus = document.getElementById('folder-status');
-        
-        if (!selectedFolderPath || !folderStatus) {
-            console.error('Folder controls not found');
-            return;
-        }
-
-        let filesToUpload = [];
-        let fileObjects = [];
-
-        try {
-            // ブラウザ選択フォルダの場合（File System Access API）
-            if (selectedFolderPath.dataset.folderHandle === 'browser-directory') {
-                const directoryHandle = window.selectedDirectoryHandle;
-                
-                if (!directoryHandle) {
-                    folderStatus.innerHTML = '<span style="color: red;">❌ フォルダが再選択されていません。フォルダを再選択してください。</span>';
-                    return;
-                }
-                
-                folderStatus.innerHTML = '<span style="color: blue;">🔄 File System Access APIからファイルを取得中...</span>';
-                
-                // File System Access APIからファイルオブジェクトを取得
-                for await (const [name, handle] of directoryHandle.entries()) {
-                    if (handle.kind === 'file') {
-                        const ext = name.toLowerCase().split('.').pop();
-                        if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext)) {
-                            const file = await handle.getFile();
-                            fileObjects.push(file);
-                        }
-                    }
-                }
-            }
-            // フォールバックファイル選択の場合
-            else if (selectedFolderPath.dataset.fallbackFiles) {
-                // webkitdirectoryの場合、ファイルオブジェクトは既に保存されていない
-                // ユーザーに再選択を促す
-                folderStatus.innerHTML = '<span style="color: orange;">⚠️ フォールバックモードでは再度ファイルを選択してください</span>';
-                this.showFallbackFileUploader();
-                return;
-            }
-
-            if (fileObjects.length === 0) {
-                folderStatus.innerHTML = '<span style="color: orange;">アップロード可能なビデオファイルが見つかりませんでした</span>';
-                return;
-            }
-
-            folderStatus.innerHTML = `<span style="color: blue;">📤 ${fileObjects.length}個のファイルをアップロード中...</span>`;
-            
-            let successCount = 0;
-            let errorCount = 0;
-
-            for (const [index, file] of fileObjects.entries()) {
-                try {
-                    folderStatus.innerHTML = `<span style="color: blue;">📤 ファイル ${index + 1}/${fileObjects.length}: ${file.name} をアップロード中...</span>`;
-                    
-                    const formData = new FormData();
-                    formData.append('video', file);
-                    
-                    const response = await fetch('/api/videos/upload', {
-                        method: 'POST',
-                        body: formData
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        successCount++;
-                        console.log(`✅ Uploaded: ${file.name}`);
-                    } else {
-                        errorCount++;
-                        console.error(`❌ Failed to upload: ${file.name}`, result.message);
-                    }
-                } catch (error) {
-                    errorCount++;
-                    console.error(`❌ Error uploading: ${file.name}`, error);
-                }
-            }
-
-            // 結果表示
-            if (errorCount === 0) {
-                folderStatus.innerHTML = `<span style="color: green;">✅ 全ての${successCount}個のファイルのアップロードが完了しました</span>`;
-            } else {
-                folderStatus.innerHTML = `<span style="color: orange;">⚠️ ${successCount}個成功、${errorCount}個失敗でアップロードが完了しました</span>`;
-            }
-
-            // サムネイルを再読み込み
-            await this.fetchThumbnails();
-            
-            setTimeout(() => {
-                folderStatus.innerHTML = '';
-            }, 5000);
-
-        } catch (error) {
-            console.error('Upload selected files error:', error);
-            folderStatus.innerHTML = `<span style="color: red;">❌ アップロードエラー: ${error.message}</span>`;
-        }
-    },
-
-    // フォールバックファイルアップローダー
-    showFallbackFileUploader() {
-        const folderStatus = document.getElementById('folder-status');
-        
-        // 隠しファイル入力を作成
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.webkitdirectory = true;
-        fileInput.multiple = true;
-        fileInput.accept = 'video/*';
-        fileInput.style.display = 'none';
-        
-        fileInput.addEventListener('change', async (event) => {
-            const files = Array.from(event.target.files);
-            const videoFiles = files.filter(file => {
-                const ext = file.name.toLowerCase().split('.').pop();
-                return ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext);
-            });
-
-            if (videoFiles.length > 0) {
-                folderStatus.innerHTML = `<span style="color: blue;">📤 ${videoFiles.length}個のファイルをアップロード中...</span>`;
-                
-                let successCount = 0;
-                let errorCount = 0;
-
-                for (const [index, file] of videoFiles.entries()) {
-                    try {
-                        folderStatus.innerHTML = `<span style="color: blue;">📤 ファイル ${index + 1}/${videoFiles.length}: ${file.name} をアップロード中...</span>`;
-                        
-                        const formData = new FormData();
-                        formData.append('video', file);
-                        
-                        const response = await fetch('/api/videos/upload', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        
-                        const result = await response.json();
-                        
-                        if (result.success) {
-                            successCount++;
-                            console.log(`✅ Uploaded: ${file.name}`);
-                        } else {
-                            errorCount++;
-                            console.error(`❌ Failed to upload: ${file.name}`, result.message);
-                        }
-                    } catch (error) {
-                        errorCount++;
-                        console.error(`❌ Error uploading: ${file.name}`, error);
-                    }
-                }
-
-                // 結果表示
-                if (errorCount === 0) {
-                    folderStatus.innerHTML = `<span style="color: green;">✅ 全ての${successCount}個のファイルのアップロードが完了しました</span>`;
-                } else {
-                    folderStatus.innerHTML = `<span style="color: orange;">⚠️ ${successCount}個成功、${errorCount}個失敗でアップロードが完了しました</span>`;
-                }
-
-                // サムネイルを再読み込み
-                await this.fetchThumbnails();
-                
-                setTimeout(() => {
-                    folderStatus.innerHTML = '';
-                }, 5000);
-            } else {
-                folderStatus.innerHTML = '<span style="color: orange;">選択されたフォルダにビデオファイルが見つかりませんでした</span>';
-            }
-            
-            document.body.removeChild(fileInput);
-        });
-        
-        document.body.appendChild(fileInput);
-        fileInput.click();
-    },
-
-    // ブラウザで選択されたファイル情報からサムネイル表示を更新
-    async updateThumbnailsFromBrowserFiles(videoFiles) {
-        const thumbnailGrid = this.elements.thumbnailGrid;
-        if (!thumbnailGrid) return;
-
-        // ローディング表示
-        thumbnailGrid.innerHTML = '<p>ブラウザ選択ファイルを処理中...</p>';
-
-        try {
-            // ビデオファイル情報を表示用に変換
-            const videoItems = videoFiles.map((file, index) => {
-                return {
-                    id: `browser-${index}`,
-                    originalName: file.name,
-                    size: file.size,
-                    uploadDate: new Date(file.lastModified),
-                    thumbnailUrl: null, // ブラウザ選択ではサムネイル生成不可
-                    isBrowserFile: true
-                };
-            });
-
-            this.displayThumbnails(videoItems);
-            
-            console.log(`Displayed ${videoFiles.length} browser-selected video files`);
-        } catch (error) {
-            console.error('Error updating browser files display:', error);
-            thumbnailGrid.innerHTML = '<p>ファイル表示エラー</p>';
-        }
-    },
-
-    // フォルダ選択ダイアログ機能
+    // サーバー参照フォルダ選択ダイアログ機能
     async selectVideoFolder() {
         const selectedFolderPath = document.getElementById('selected-folder-path');
         const changeFolderBtn = document.getElementById('change-folder-btn');
         const folderStatus = document.getElementById('folder-status');
 
         // 既存のデータをクリア
-        selectedFolderPath.dataset.folderHandle = '';
-        selectedFolderPath.dataset.fallbackFiles = '';
-        selectedFolderPath.dataset.folderPath = '';
-        selectedFolderPath.dataset.videoFiles = '';
         selectedFolderPath.dataset.realFolderPath = '';
 
         try {
-            folderStatus.innerHTML = '<span style="color: blue;">📁 フォルダ選択方法を確認中...</span>';
+            folderStatus.innerHTML = '<span style="color: blue;">📁 フォルダ選択ダイアログを起動中...</span>';
             
             // File System Access APIをサポートしているかチェック
             if ('showDirectoryPicker' in window) {
                 console.log('🔄 Using File System Access API (Modern browsers)');
                 const directoryHandle = await window.showDirectoryPicker();
                 
-                // ディレクトリハンドルから実際のパスを取得を試行
+                // フォルダ名を取得
                 const folderName = directoryHandle.name;
                 
-                // ローカルフォルダの実際のパスを取得しようと試行
-                let realFolderPath = '';
-                try {
-                    // デスクトップアプリかElectronの場合、パスが取得できる可能性がある
-                    if (window.electronAPI && window.electronAPI.getFolderPath) {
-                        realFolderPath = await window.electronAPI.getFolderPath(directoryHandle);
-                    } else {
-                        // ブラウザ版では制限のため、パス情報の取得を試行
-                        if (directoryHandle.name && directoryHandle.name.startsWith('/')) {
-                            realFolderPath = directoryHandle.name;
-                        }
-                    }
-                } catch (pathError) {
-                    console.log('Path extraction not available in browser environment');
-                }
-
-                if (realFolderPath) {
-                    // ローカルフォルダとして設定
-                    selectedFolderPath.textContent = `📁 ワークフォルダ: ${realFolderPath}`;
-                    selectedFolderPath.dataset.realFolderPath = realFolderPath;
-                    folderStatus.innerHTML = '<span style="color: green;">✅ ローカルフォルダが選択されました（ワークフォルダモード）</span>';
-                    
-                    changeFolderBtn.textContent = 'ワークフォルダに設定';
-                } else {
-                    // ブラウザファイルアクセスモード
-                    selectedFolderPath.textContent = `📂 ブラウザ選択: ${folderName}`;
-                    
-                    // DirectoryHandleはグローバル変数に保存（シリアライズできないため）
-                    window.selectedDirectoryHandle = directoryHandle;
-                    
-                    // ファイル一覧を取得してサーバーに送信する方法に変更
-                    await this.handleDirectorySelection(directoryHandle);
-                    
-                    folderStatus.innerHTML = '<span style="color: green;">✅ ブラウザフォルダが選択されました（アップロードモード）</span>';
-                    changeFolderBtn.textContent = 'フォルダ処理';
-                }
+                // よくあるパス候補から選択する方式
+                folderStatus.innerHTML = '<span style="color: blue;">📂 フォルダの場所を選択してください...</span>';
                 
-                changeFolderBtn.disabled = false;
+                const userPath = await this.selectFolderLocation(folderName);
+
+                if (userPath) {
+                    // フォルダとして設定
+                    selectedFolderPath.textContent = `📁 選択済み: ${userPath}`;
+                    selectedFolderPath.dataset.realFolderPath = userPath;
+                    folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました</span>';
+                    
+                    changeFolderBtn.textContent = 'サーバー参照フォルダに設定';
+                    changeFolderBtn.disabled = false;
+                } else {
+                    folderStatus.innerHTML = '<span style="color: orange;">⚠️ フォルダパスの選択がキャンセルされました</span>';
+                }
                 
             } else {
-                // フォールバック: input[type="file"]を使用
-                console.log('🔄 Falling back to input file method (Legacy browsers)');
-                this.showFallbackFolderSelector();
+                // フォールバック: input[type="file"]を使用（webkitdirectory）
+                console.log('🔄 Falling back to webkitdirectory (Legacy browsers)');
+                
+                const fileInput = document.createElement('input');
+                fileInput.type = 'file';
+                fileInput.webkitdirectory = true;
+                fileInput.multiple = true;
+                fileInput.style.display = 'none';
+                
+                fileInput.addEventListener('change', async (event) => {
+                    const files = Array.from(event.target.files);
+
+                    if (files.length > 0) {
+                        // 最初のファイルからフォルダパスを抽出
+                        const firstFile = files[0];
+                        const relativePath = firstFile.webkitRelativePath;
+                        const pathParts = relativePath.split('/');
+                        const folderName = pathParts[0];
+                        
+                        console.log('Relative path:', relativePath);
+                        console.log('Folder name:', folderName);
+                        
+                        // フォルダ場所選択
+                        const userPath = await this.selectFolderLocation(folderName);
+                        
+                        if (userPath) {
+                            selectedFolderPath.textContent = `📁 選択済み: ${userPath}`;
+                            selectedFolderPath.dataset.realFolderPath = userPath;
+                            
+                            changeFolderBtn.disabled = false;
+                            changeFolderBtn.textContent = 'サーバー参照フォルダに設定';
+                            folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました</span>';
+                        } else {
+                            folderStatus.innerHTML = '<span style="color: orange;">⚠️ フォルダパスの選択がキャンセルされました</span>';
+                        }
+                    } else {
+                        folderStatus.innerHTML = '<span style="color: orange;">フォルダが選択されませんでした</span>';
+                    }
+                    
+                    document.body.removeChild(fileInput);
+                });
+                
+                document.body.appendChild(fileInput);
+                fileInput.click();
             }
         } catch (error) {
             if (error.name === 'AbortError') {
@@ -856,268 +456,174 @@ const VideoApp = {
         }
     },
 
-    // Directory Handleを処理
-    async handleDirectorySelection(directoryHandle) {
-        try {
-            const videoFiles = [];
-            
-            // ディレクトリ内のファイルを列挙
-            for await (const [name, handle] of directoryHandle.entries()) {
-                if (handle.kind === 'file') {
-                    // ビデオファイルかチェック
-                    const ext = name.toLowerCase().split('.').pop();
-                    if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext)) {
-                        const file = await handle.getFile();
-                        videoFiles.push({
-                            name: file.name,
-                            size: file.size,
-                            lastModified: file.lastModified,
-                            type: file.type
-                        });
-                    }
-                }
-            }
-
-            console.log(`Found ${videoFiles.length} video files in selected directory`);
-            
-            // 選択されたフォルダの情報を保存
-            const selectedFolderPath = document.getElementById('selected-folder-path');
-            selectedFolderPath.dataset.videoFiles = JSON.stringify(videoFiles);
-            selectedFolderPath.dataset.folderHandle = 'browser-directory';
-            
-            console.log('Set folderHandle to:', selectedFolderPath.dataset.folderHandle);
-            console.log('Video files data:', selectedFolderPath.dataset.videoFiles);
-            
-        } catch (error) {
-            console.error('Error processing directory:', error);
-            throw error;
-        }
-    },
-
-    // フォールバック: ファイル選択
-    showFallbackFolderSelector() {
-        const folderStatus = document.getElementById('folder-status');
-        
-        // 隠しファイル入力を作成
-        const fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.webkitdirectory = true;
-        fileInput.multiple = true;
-        fileInput.style.display = 'none';
-        
-        fileInput.addEventListener('change', (event) => {
-            const files = Array.from(event.target.files);
-            const videoFiles = files.filter(file => {
-                const ext = file.name.toLowerCase().split('.').pop();
-                return ['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv'].includes(ext);
-            });
-
-            if (videoFiles.length > 0) {
-                const folderPath = videoFiles[0].webkitRelativePath.split('/')[0];
-                const selectedFolderPath = document.getElementById('selected-folder-path');
-                const changeFolderBtn = document.getElementById('change-folder-btn');
-                
-                selectedFolderPath.textContent = `選択済み: ${folderPath} (${videoFiles.length}個のビデオ)`;
-                selectedFolderPath.dataset.folderPath = folderPath;
-                selectedFolderPath.dataset.fallbackFiles = JSON.stringify(videoFiles.map(f => ({
-                    name: f.name,
-                    size: f.size,
-                    lastModified: f.lastModified,
-                    type: f.type,
-                    path: f.webkitRelativePath
-                })));
-                
-                console.log('Fallback folder selection set:');
-                console.log('- folderPath:', selectedFolderPath.dataset.folderPath);
-                console.log('- fallbackFiles:', selectedFolderPath.dataset.fallbackFiles);
-                
-                changeFolderBtn.disabled = false;
-                folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました（フォールバックモード）</span>';
-            } else {
-                folderStatus.innerHTML = '<span style="color: orange;">選択されたフォルダにビデオファイルが見つかりませんでした</span>';
-            }
-            
-            document.body.removeChild(fileInput);
-        });
-        
-        document.body.appendChild(fileInput);
-        fileInput.click();
-    },
-
-    // ローカルフォルダ選択ダイアログを開く
-    selectLocalFolder() {
-        const localFolderInput = document.getElementById('local-folder-input');
-        if (localFolderInput) {
-            localFolderInput.click();
-        }
-    },
-
-    // ローカルフォルダ選択の処理
-    async handleLocalFolderSelection(event) {
-        const files = Array.from(event.target.files);
-        const selectedFolderPath = document.getElementById('selected-folder-path');
-        const folderStatus = document.getElementById('folder-status');
-        const changeFolderBtn = document.getElementById('change-folder-btn');
-        
-        if (!selectedFolderPath || !folderStatus) {
-            console.error('Local folder selection controls not found');
-            return;
-        }
-        
-        if (files.length === 0) {
-            folderStatus.innerHTML = '<span style="color: red;">❌ フォルダが選択されませんでした</span>';
-            return;
-        }
-        
-        try {
-            folderStatus.innerHTML = '<span style="color: blue;">🔄 ローカルフォルダを処理中...</span>';
-            
-            // 最初のファイルからフォルダパスを抽出
-            const firstFile = files[0];
-            const relativePath = firstFile.webkitRelativePath;
-            const pathParts = relativePath.split('/');
-            const folderName = pathParts[0];
-            
-            console.log('Relative path:', relativePath);
-            console.log('Folder name:', folderName);
-            
-            // 複数のパス候補を生成
-            const pathCandidates = this.generatePathCandidates(folderName);
-            
-            // サーバーで各候補を試行
-            let successfulPath = null;
-            
-            for (const candidatePath of pathCandidates) {
-                console.log(`Trying path: ${candidatePath}`);
-                
-                try {
-                    const response = await fetch('/api/videos/change-folder', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ 
-                            mode: 'local-folder',
-                            folderPath: candidatePath 
-                        })
-                    });
-
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        successfulPath = candidatePath;
-                        console.log(`✅ Found working path: ${candidatePath}`);
-                        break;
-                    }
-                } catch (error) {
-                    console.log(`❌ Path failed: ${candidatePath}`);
-                }
-            }
-
-            if (successfulPath) {
-                // UI更新
-                selectedFolderPath.textContent = `📁 ワークフォルダ: ${successfulPath}`;
-                selectedFolderPath.dataset.realFolderPath = successfulPath;
-                
-                // 既存のデータをクリア
-                selectedFolderPath.dataset.folderHandle = '';
-                selectedFolderPath.dataset.fallbackFiles = '';
-                selectedFolderPath.dataset.folderPath = '';
-                selectedFolderPath.dataset.videoFiles = '';
-                
-                folderStatus.innerHTML = '<span style="color: green;">✅ ワークフォルダが設定されました</span>';
-                console.log('Work folder set successfully to:', successfulPath);
-                
-                // アップロードボタンを非表示
-                const uploadBtn = document.getElementById('upload-selected-btn');
-                if (uploadBtn) {
-                    uploadBtn.style.display = 'none';
-                }
-                
-                // フォルダ変更ボタンを無効化（既に設定済みのため）
-                if (changeFolderBtn) {
-                    changeFolderBtn.disabled = true;
-                    changeFolderBtn.textContent = '設定済み';
-                }
-                
-                // 入力フィールドをリセット
-                event.target.value = '';
-                
-                // サムネイルを再読み込み
-                await this.fetchThumbnails();
-                
-                setTimeout(() => {
-                    folderStatus.innerHTML = '';
-                }, 3000);
-            } else {
-                // 自動推測が失敗した場合、手動入力を促す
-                folderStatus.innerHTML = '<span style="color: orange;">⚠️ パスの自動推測に失敗しました</span>';
-                
-                const userPath = prompt(
-                    `フォルダ "${folderName}" の完全なパスを入力してください:\n\n例:\n/Users/yourname/Desktop/${folderName}\n/Users/yourname/Downloads/${folderName}\n/Users/yourname/Documents/${folderName}`, 
-                    `/Users/${this.getCurrentUser()}/${folderName}`
-                );
-                
-                if (userPath) {
-                    const response = await fetch('/api/videos/change-folder', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ 
-                            mode: 'local-folder',
-                            folderPath: userPath 
-                        })
-                    });
-                    
-                    const result = await response.json();
-                    if (result.success) {
-                        selectedFolderPath.textContent = `📁 ワークフォルダ: ${userPath}`;
-                        selectedFolderPath.dataset.realFolderPath = userPath;
-                        folderStatus.innerHTML = '<span style="color: green;">✅ ワークフォルダが設定されました</span>';
-                        await this.fetchThumbnails();
-                    } else {
-                        folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
-                    }
-                } else {
-                    folderStatus.innerHTML = '<span style="color: orange;">⚠️ パス入力がキャンセルされました</span>';
-                }
-            }
-        } catch (error) {
-            console.error('Local folder selection error:', error);
-            folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
-        }
-    },
-
-    // パス候補を生成
-    generatePathCandidates(folderName) {
+    // フォルダの場所を選択する（クロスプラットフォーム対応）
+    async selectFolderLocation(folderName) {
+        const platform = this.detectPlatform();
         const currentUser = this.getCurrentUser();
+        const candidates = this.generatePlatformSpecificCandidates(folderName, currentUser, platform);
+
+        let message = `フォルダ "${folderName}" の場所を選択してください:\n\n`;
+        candidates.forEach((candidate, index) => {
+            message += `${index + 1}. ${candidate.name} (${candidate.path})\n`;
+        });
+        message += `\n該当しない場合は「キャンセル」を押してフルパスを手動入力してください。`;
+
+        const choice = prompt(message + '\n\n番号を入力してください (1-5):');
+        
+        if (choice && choice >= '1' && choice <= candidates.length.toString()) {
+            const selectedIndex = parseInt(choice) - 1;
+            return candidates[selectedIndex].path;
+        } else if (choice === null) {
+            // キャンセル
+            return null;
+        } else {
+            // 手動入力
+            const defaultPath = candidates[0]?.path || this.getDefaultPath(folderName, currentUser, platform);
+            return prompt(
+                `フォルダ "${folderName}" のフルパスを入力してください:\n\n例:\n${this.getExamplePaths(folderName, currentUser, platform)}`, 
+                defaultPath
+            );
+        }
+    },
+
+    // プラットフォーム検出
+    detectPlatform() {
+        const userAgent = navigator.userAgent.toLowerCase();
+        if (userAgent.includes('win')) {
+            return 'windows';
+        } else if (userAgent.includes('mac')) {
+            return 'macos';
+        } else if (userAgent.includes('linux')) {
+            return 'linux';
+        } else {
+            return 'unknown';
+        }
+    },
+
+    // プラットフォーム固有の候補生成
+    generatePlatformSpecificCandidates(folderName, currentUser, platform) {
         const candidates = [];
         
-        // macOSの一般的なディレクトリでの候補
-        const commonDirs = ['Desktop', 'Downloads', 'Documents', 'Movies', 'Videos', 'Pictures'];
-        
-        commonDirs.forEach(dir => {
-            candidates.push(`/Users/${currentUser}/${dir}/${folderName}`);
-        });
-        
-        // ルートディレクトリの候補
-        candidates.push(`/${folderName}`);
-        
-        // Applicationsフォルダの候補
-        candidates.push(`/Applications/${folderName}`);
-        
-        // その他の一般的な場所
-        candidates.push(`/tmp/${folderName}`);
-        candidates.push(`/var/tmp/${folderName}`);
+        switch (platform) {
+            case 'windows':
+                candidates.push(
+                    { name: 'デスクトップ', path: `C:\\Users\\${currentUser}\\Desktop\\${folderName}` },
+                    { name: 'ダウンロード', path: `C:\\Users\\${currentUser}\\Downloads\\${folderName}` },
+                    { name: 'ドキュメント', path: `C:\\Users\\${currentUser}\\Documents\\${folderName}` },
+                    { name: 'ビデオ', path: `C:\\Users\\${currentUser}\\Videos\\${folderName}` },
+                    { name: 'ピクチャ', path: `C:\\Users\\${currentUser}\\Pictures\\${folderName}` }
+                );
+                break;
+                
+            case 'linux':
+                candidates.push(
+                    { name: 'デスクトップ', path: `/home/${currentUser}/Desktop/${folderName}` },
+                    { name: 'ダウンロード', path: `/home/${currentUser}/Downloads/${folderName}` },
+                    { name: 'ドキュメント', path: `/home/${currentUser}/Documents/${folderName}` },
+                    { name: 'ビデオ', path: `/home/${currentUser}/Videos/${folderName}` },
+                    { name: 'ピクチャ', path: `/home/${currentUser}/Pictures/${folderName}` }
+                );
+                break;
+                
+            case 'macos':
+            default:
+                candidates.push(
+                    { name: 'デスクトップ', path: `/Users/${currentUser}/Desktop/${folderName}` },
+                    { name: 'ダウンロード', path: `/Users/${currentUser}/Downloads/${folderName}` },
+                    { name: 'ドキュメント', path: `/Users/${currentUser}/Documents/${folderName}` },
+                    { name: 'ムービー', path: `/Users/${currentUser}/Movies/${folderName}` },
+                    { name: 'ピクチャ', path: `/Users/${currentUser}/Pictures/${folderName}` }
+                );
+                break;
+        }
         
         return candidates;
     },
 
-    // 現在のユーザー名を推測
+    // デフォルトパス取得
+    getDefaultPath(folderName, currentUser, platform) {
+        switch (platform) {
+            case 'windows':
+                return `C:\\Users\\${currentUser}\\Desktop\\${folderName}`;
+            case 'linux':
+                return `/home/${currentUser}/Desktop/${folderName}`;
+            case 'macos':
+            default:
+                return `/Users/${currentUser}/Desktop/${folderName}`;
+        }
+    },
+
+    // 例示パス生成
+    getExamplePaths(folderName, currentUser, platform) {
+        switch (platform) {
+            case 'windows':
+                return `C:\\Users\\${currentUser}\\Desktop\\${folderName}\nC:\\Users\\${currentUser}\\Downloads\\${folderName}\nD:\\Videos\\${folderName}`;
+            case 'linux':
+                return `/home/${currentUser}/Desktop/${folderName}\n/home/${currentUser}/Downloads/${folderName}\n/media/${currentUser}/Videos/${folderName}`;
+            case 'macos':
+            default:
+                return `/Users/${currentUser}/Desktop/${folderName}\n/Users/${currentUser}/Downloads/${folderName}\n/Volumes/ExternalDrive/${folderName}`;
+        }
+    },
+
+    // パス候補を生成（クロスプラットフォーム対応）
+    generatePathCandidates(folderName) {
+        const platform = this.detectPlatform();
+        const currentUser = this.getCurrentUser();
+        const candidates = [];
+        
+        switch (platform) {
+            case 'windows':
+                const windowsDirs = ['Desktop', 'Downloads', 'Documents', 'Videos', 'Pictures'];
+                windowsDirs.forEach(dir => {
+                    candidates.push(`C:\\Users\\${currentUser}\\${dir}\\${folderName}`);
+                });
+                // 他のドライブも候補に
+                candidates.push(`D:\\${folderName}`);
+                candidates.push(`E:\\${folderName}`);
+                break;
+                
+            case 'linux':
+                const linuxDirs = ['Desktop', 'Downloads', 'Documents', 'Videos', 'Pictures'];
+                linuxDirs.forEach(dir => {
+                    candidates.push(`/home/${currentUser}/${dir}/${folderName}`);
+                });
+                // 一般的なLinuxディレクトリ
+                candidates.push(`/media/${currentUser}/${folderName}`);
+                candidates.push(`/mnt/${folderName}`);
+                candidates.push(`/opt/${folderName}`);
+                break;
+                
+            case 'macos':
+            default:
+                const macosDirs = ['Desktop', 'Downloads', 'Documents', 'Movies', 'Pictures'];
+                macosDirs.forEach(dir => {
+                    candidates.push(`/Users/${currentUser}/${dir}/${folderName}`);
+                });
+                // macOS特有のディレクトリ
+                candidates.push(`/Volumes/${folderName}`);
+                candidates.push(`/Applications/${folderName}`);
+                candidates.push(`/tmp/${folderName}`);
+                break;
+        }
+        
+        return candidates;
+    },
+
+    // 現在のユーザー名を推測（クロスプラットフォーム対応）
     getCurrentUser() {
-        // ブラウザでは環境変数にアクセスできないため、一般的な値を返す
-        return 'tok'; // デフォルトユーザー名（実際の環境に合わせて調整）
+        const platform = this.detectPlatform();
+        
+        // プラットフォーム別のデフォルトユーザー名
+        switch (platform) {
+            case 'windows':
+                return 'User'; // Windowsの一般的なユーザー名
+            case 'linux':
+                return 'user'; // Linuxの一般的なユーザー名
+            case 'macos':
+            default:
+                return 'tok'; // macOSのデフォルト（実際の環境に合わせて調整）
+        }
     }
 };
 
@@ -1132,7 +638,6 @@ window.debugFetchThumbnails = () => VideoApp.fetchThumbnails();
 window.closeVideoPlayer = () => VideoApp.closeVideoPlayer();
 window.changeVideoFolder = () => VideoApp.changeVideoFolder();
 window.selectVideoFolder = () => VideoApp.selectVideoFolder();
-window.selectLocalFolder = () => VideoApp.selectLocalFolder();
 window.runThumbnailTests = () => {
     console.log('🧪 Running thumbnail tests...');
     // テスト関数をここに実装
