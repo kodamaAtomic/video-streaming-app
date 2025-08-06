@@ -4,12 +4,14 @@ export interface VideoMetadata {
   originalName: string;
   path: string;
   size: number;
+  mimetype: string;
   duration?: number;
   resolution?: {
     width: number;
     height: number;
   };
   thumbnailPath?: string;
+  uploadDate: Date;
   createdAt: Date;
   updatedAt: Date;
 }

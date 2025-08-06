@@ -56,5 +56,7 @@ router.get('/:id/stream', videoController.streamVideo.bind(videoController));
 router.get('/thumbnails/all', videoController.getAllThumbnails.bind(videoController));
 router.post('/upload', upload.single('video'), videoController.uploadVideo.bind(videoController));
 router.delete('/:id', videoController.deleteVideo.bind(videoController));
+// フォルダ変更エンドポイントを追加
+router.post('/change-folder', videoController.changeVideoFolder.bind(videoController));
 
 export { router as videoRoutes };

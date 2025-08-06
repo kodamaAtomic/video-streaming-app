@@ -1,18 +1,15 @@
-import fs from 'fs/promises';
-import fsSynce from 'fs';
+import fs from 'fs';
 import path from 'path';
 import { VideoMetadata } from '../types';
 import ThumbnailGenerator from './thumbnailGenerator';
 
 export default class VideoService {
-  private readonly videoDir: string;
+  private videoDir: string;
   private readonly thumbnailGenerator: ThumbnailGenerator;
   private videos: Map<string, VideoMetadata> = new Map();
 
   constructor(videoDir?: string) {
-    // dist配下のstorageに統一
     this.videoDir = videoDir || path.join(__dirname, '../storage/videos');
-    // ThumbnailGeneratorにも同じくdist配下のパスを渡す
     this.thumbnailGenerator = new ThumbnailGenerator(path.join(__dirname, '../storage/thumbnails'));
     console.log(`Video directory set to: ${this.videoDir}`);
     console.log(`Current __dirname: ${__dirname}`);
@@ -20,112 +17,113 @@ export default class VideoService {
     this.loadVideos();
   }
 
-  private async initializeVideoDir(): Promise<void> {
-    try {
-      await fs.access(this.videoDir);
-      console.log(`Video directory exists: ${this.videoDir}`);
-    } catch {
-      await fs.mkdir(this.videoDir, { recursive: true });
+  private initializeVideoDir(): void {
+    if (!fs.existsSync(this.videoDir)) {
+      fs.mkdirSync(this.videoDir, { recursive: true });
       console.log(`Created video directory: ${this.videoDir}`);
     }
   }
 
   private async loadVideos(): Promise<void> {
     try {
-      // ディレクトリが存在しない場合は作成
-      if (!fsSynce.existsSync(this.videoDir)) {
-        await fs.mkdir(this.videoDir, { recursive: true });
-        console.log('No videos directory found, created empty directory');
-        return;
-      }
-
-      // ディレクトリの情報を確認
-      const stats = await fs.stat(this.videoDir);
-      if (!stats.isDirectory()) {
-        console.error(`Path is not a directory: ${this.videoDir}`);
-        return;
-      }
-
-      const files = await fs.readdir(this.videoDir);
+      const files = fs.readdirSync(this.videoDir);
       const videoFiles = files.filter(file => 
-        /\.(mp4|avi|mkv|mov|wmv|flv|webm)$/i.test(file)
+        ['.mp4', '.avi', '.mov', '.mkv', '.webm'].some(ext => 
+          file.toLowerCase().endsWith(ext)
+        )
       );
 
-      console.log(`Found ${videoFiles.length} video files`);
-
+      console.log(`Found ${videoFiles.length} video files in ${this.videoDir}`);
+      
       for (const file of videoFiles) {
-        const videoPath = path.join(this.videoDir, file);
-        const stats = await fs.stat(videoPath);
-        
-        const videoId = this.generateVideoId(file);
-        const metadata: VideoMetadata = {
-          id: videoId,
-          filename: file,
-          originalName: file,
-          path: videoPath,
-          size: stats.size,
-          createdAt: stats.birthtime,
-          updatedAt: stats.mtime
-        };
+        try {
+          const videoPath = path.join(this.videoDir, file);
+          const stats = fs.statSync(videoPath);
+          const videoId = path.parse(file).name;
+          
+          const metadata: VideoMetadata = {
+            id: videoId,
+            filename: file,
+            originalName: file,
+            path: videoPath,
+            size: stats.size,
+            mimetype: this.getMimeType(file),
+            uploadDate: stats.mtime,
+            createdAt: stats.mtime,
+            updatedAt: stats.mtime,
+            thumbnailPath: undefined
+          };
 
-        // サムネイルが存在しない場合は生成
-        await this.ensureThumbnail(metadata);
-        
-        this.videos.set(videoId, metadata);
+          await this.ensureThumbnail(metadata);
+          
+          this.videos.set(videoId, metadata);
+          console.log(`Loaded video: ${file}`);
+        } catch (error) {
+          console.error(`Error loading video ${file}:`, error);
+        }
       }
     } catch (error) {
-      console.error('Failed to load videos:', error);
+      console.error('Error loading videos:', error);
     }
   }
 
-  private generateVideoId(filename: string): string {
-    return Buffer.from(filename + Date.now()).toString('base64').replace(/[+/=]/g, '');
-  }
-
-  private async ensureThumbnail(metadata: VideoMetadata): Promise<void> {
-    try {
-      console.log(`Generating thumbnail for: ${metadata.filename}`);
-      const thumbnailPath = await this.thumbnailGenerator.generateThumbnail(
-        metadata.path,
-        metadata.id
-      );
-      metadata.thumbnailPath = thumbnailPath;
-      console.log(`Thumbnail generated: ${thumbnailPath}`);
-    } catch (error) {
-      console.error(`Failed to generate thumbnail for ${metadata.filename}:`, error);
-      // サムネイル生成に失敗してもビデオメタデータは保持
-      metadata.thumbnailPath = undefined;
-    }
+  private getMimeType(filename: string): string {
+    const ext = path.extname(filename).toLowerCase();
+    const mimeTypes: { [key: string]: string } = {
+      '.mp4': 'video/mp4',
+      '.avi': 'video/x-msvideo',
+      '.mov': 'video/quicktime',
+      '.mkv': 'video/x-matroska',
+      '.webm': 'video/webm'
+    };
+    return mimeTypes[ext] || 'video/mp4';
   }
 
   async getAllVideos(): Promise<VideoMetadata[]> {
     return Array.from(this.videos.values());
   }
 
-  async getVideoById(id: string): Promise<VideoMetadata | null> {
-    return this.videos.get(id) || null;
+  async getVideoById(id: string): Promise<VideoMetadata | undefined> {
+    return this.videos.get(id);
   }
 
-  async addVideo(file: Express.Multer.File): Promise<VideoMetadata> {
-    const videoId = this.generateVideoId(file.originalname + Date.now());
-    // ファイルパスを正しく設定（file.pathを使用）
-    const videoPath = file.path;
+  async ensureThumbnail(video: VideoMetadata): Promise<void> {
+    try {
+      const thumbnailPath = await this.thumbnailGenerator.generateThumbnail(
+        video.path, 
+        video.id
+      );
+      video.thumbnailPath = thumbnailPath;
+      console.log(`Generated thumbnail for ${video.originalName}: ${thumbnailPath}`);
+    } catch (error) {
+      console.error(`Failed to generate thumbnail for ${video.originalName}:`, error);
+      video.thumbnailPath = undefined;
+    }
+  }
+
+  async addVideo(file: Express.Multer.File | undefined): Promise<VideoMetadata> {
+    if (!file) {
+      throw new Error('No file provided');
+    }
 
     console.log(`Adding video: ${file.originalname}`);
-    console.log(`File path: ${videoPath}`);
-    console.log(`Video ID: ${videoId}`);
-
+    console.log(`File path: ${file.path}`);
+    
+    const videoId = path.parse(file.filename).name;
+    
     const metadata: VideoMetadata = {
       id: videoId,
       filename: file.filename,
       originalName: file.originalname,
-      path: videoPath,
+      path: file.path,
       size: file.size,
+      mimetype: file.mimetype,
+      uploadDate: new Date(),
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      thumbnailPath: undefined
     };
 
-    // サムネイル生成
     await this.ensureThumbnail(metadata);
 
     this.videos.set(videoId, metadata);
@@ -144,24 +142,21 @@ export default class VideoService {
     console.log(`Video path: ${video.path}`);
 
     try {
-      // ファイルの存在確認
-      if (fsSynce.existsSync(video.path)) {
-        await fs.unlink(video.path);
-        console.log(`Video file deleted: ${video.path}`);
+      if (fs.existsSync(video.path)) {
+        fs.unlinkSync(video.path);
+        console.log(`Deleted video file: ${video.path}`);
       } else {
-        console.warn(`Video file not found: ${video.path}`);
+        console.log(`Video file not found: ${video.path}`);
       }
-      
-      // サムネイル削除
-      if (video.thumbnailPath && fsSynce.existsSync(video.thumbnailPath)) {
-        await fs.unlink(video.thumbnailPath);
-        console.log(`Thumbnail deleted: ${video.thumbnailPath}`);
-      } else {
-        console.warn(`Thumbnail not found: ${video.thumbnailPath}`);
+
+      if (video.thumbnailPath && fs.existsSync(video.thumbnailPath)) {
+        fs.unlinkSync(video.thumbnailPath);
+        console.log(`Deleted thumbnail: ${video.thumbnailPath}`);
       }
 
       this.videos.delete(id);
-      console.log(`Video metadata removed from memory: ${id}`);
+      console.log(`Video ${id} successfully removed from memory`);
+      
       return true;
     } catch (error) {
       console.error(`Failed to delete video ${id}:`, error);
@@ -169,7 +164,6 @@ export default class VideoService {
     }
   }
 
-  // デバッグ用メソッドを追加
   async debugVideoInfo(id: string): Promise<void> {
     const video = this.videos.get(id);
     if (video) {
@@ -178,10 +172,29 @@ export default class VideoService {
       console.log('Filename:', video.filename);
       console.log('Original Name:', video.originalName);
       console.log('Path:', video.path);
-      console.log('Path exists:', fsSynce.existsSync(video.path));
+      console.log('Path exists:', fs.existsSync(video.path));
       console.log('Thumbnail Path:', video.thumbnailPath);
-      console.log('Thumbnail exists:', video.thumbnailPath ? fsSynce.existsSync(video.thumbnailPath) : 'No thumbnail path');
+      console.log('Thumbnail exists:', video.thumbnailPath ? fs.existsSync(video.thumbnailPath) : 'No thumbnail path');
       console.log('========================');
     }
+  }
+
+  async changeVideoDirectory(newPath: string): Promise<void> {
+    if (!fs.existsSync(newPath)) {
+      throw new Error(`Directory does not exist: ${newPath}`);
+    }
+
+    const stats = fs.statSync(newPath);
+    if (!stats.isDirectory()) {
+      throw new Error(`Path is not a directory: ${newPath}`);
+    }
+
+    console.log(`Changing video directory from ${this.videoDir} to ${newPath}`);
+    this.videoDir = newPath;
+    
+    console.log(`Video directory changed to: ${this.videoDir}`);
+    
+    this.videos.clear();
+    await this.loadVideos();
   }
 }

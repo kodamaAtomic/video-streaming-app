@@ -1,6 +1,14 @@
 import { Request, Response } from 'express';
 import VideoService from '../services/videoService';
 import path from 'path';
+import fs from 'fs';
+
+interface ApiResponse {
+  success: boolean;
+  message: string;
+  data?: any;
+  error?: string;
+}
 
 export default class VideoController {
   private videoService: VideoService;
@@ -122,7 +130,6 @@ export default class VideoController {
         return;
       }
 
-      const fs = require('fs');
       const stat = fs.statSync(video.path);
       const fileSize = stat.size;
       const range = req.headers.range;
@@ -217,6 +224,55 @@ export default class VideoController {
         message: 'Failed to delete video',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+    }
+  }
+
+  async changeVideoFolder(req: Request, res: Response): Promise<void> {
+    try {
+      const { folderPath } = req.body;
+      
+      if (!folderPath) {
+        res.status(400).json({
+          success: false,
+          message: 'Folder path is required'
+        });
+        return;
+      }
+
+      if (!fs.existsSync(folderPath)) {
+        res.status(400).json({
+          success: false,
+          message: 'Folder does not exist'
+        });
+        return;
+      }
+
+      const stats = fs.statSync(folderPath);
+      if (!stats.isDirectory()) {
+        res.status(400).json({
+          success: false,
+          message: 'Path is not a directory'
+        });
+        return;
+      }
+
+      console.log(`Changing video folder to: ${folderPath}`);
+      await (this.videoService as any).changeVideoDirectory(folderPath);
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Video folder changed successfully',
+        data: { newFolderPath: folderPath }
+      };
+      res.json(response);
+    } catch (error) {
+      console.error('Change folder error:', error);
+      const response: ApiResponse = {
+        success: false,
+        message: 'Failed to change video folder',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+      res.status(500).json(response);
     }
   }
 }

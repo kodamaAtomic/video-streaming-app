@@ -20,6 +20,12 @@
         
         <!-- コントロールセクション -->
         <div id="control-section">
+            <div class="folder-controls">
+                <label>フォルダ選択:</label>
+                <input type="text" id="folder-path" placeholder="/path/to/your/videos" style="width: 300px;">
+                <button onclick="changeVideoFolder()">フォルダ変更</button>
+                <div id="folder-status"></div>
+            </div>
             <div class="view-controls">
                 <label>表示数:</label>
                 <button class="view-btn active" data-count="24">24</button>

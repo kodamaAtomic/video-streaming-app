@@ -293,6 +293,55 @@ const VideoApp = {
                 this.elements.uploadProgress.innerHTML = `エラー: ${error.message}`;
             }
         }
+    },
+
+    // フォルダ変更機能
+    async changeVideoFolder() {
+        const folderPathInput = document.getElementById('folder-path');
+        const folderStatus = document.getElementById('folder-status');
+        
+        if (!folderPathInput || !folderStatus) {
+            console.error('Folder controls not found');
+            return;
+        }
+
+        const folderPath = folderPathInput.value.trim();
+        if (!folderPath) {
+            folderStatus.innerHTML = '<span style="color: red;">フォルダパスを入力してください</span>';
+            return;
+        }
+
+        try {
+            folderStatus.innerHTML = '<span style="color: blue;">フォルダを変更中...</span>';
+            
+            const response = await fetch('/api/videos/change-folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ folderPath })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                folderStatus.innerHTML = '<span style="color: green;">✅ フォルダ変更完了</span>';
+                console.log('Folder changed successfully to:', result.data.newFolderPath);
+                
+                // サムネイルを再読み込み
+                await this.fetchThumbnails();
+                
+                // ステータス表示を少し遅らせてクリア
+                setTimeout(() => {
+                    folderStatus.innerHTML = '';
+                }, 3000);
+            } else {
+                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${result.message}</span>`;
+            }
+        } catch (error) {
+            console.error('Change folder error:', error);
+            folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+        }
     }
 };
 
@@ -305,6 +354,7 @@ document.addEventListener('DOMContentLoaded', () => {
 window.uploadVideo = () => VideoApp.uploadVideo();
 window.debugFetchThumbnails = () => VideoApp.fetchThumbnails();
 window.closeVideoPlayer = () => VideoApp.closeVideoPlayer();
+window.changeVideoFolder = () => VideoApp.changeVideoFolder();
 window.runThumbnailTests = () => {
     console.log('🧪 Running thumbnail tests...');
     // テスト関数をここに実装
