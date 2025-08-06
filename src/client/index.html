@@ -26,6 +26,14 @@
                 <span id="selected-folder-path" class="folder-path-display">フォルダが選択されていません</span>
                 <button id="change-folder-btn" onclick="changeVideoFolder()" disabled>フォルダ変更</button>
                 <button id="upload-selected-btn" onclick="uploadSelectedFiles()" disabled style="display: none;">選択ファイルをアップロード</button>
+                
+                <!-- ローカルフォルダダイアログ選択機能 -->
+                <div class="local-folder-select" style="margin-top: 10px;">
+                    <label>または直接ローカルフォルダを選択:</label>
+                    <button id="local-folder-btn" onclick="selectLocalFolder()">🗂️ ローカルフォルダを選択</button>
+                    <input type="file" id="local-folder-input" webkitdirectory style="display: none;">
+                </div>
+                
                 <div id="folder-status"></div>
             </div>
             <div class="view-controls">

@@ -232,6 +232,46 @@ export default class VideoController {
     try {
       const { folderPath, videoFiles, mode } = req.body;
       
+      // ローカルフォルダ設定モード
+      if (mode === 'local-folder') {
+        if (!folderPath) {
+          res.status(400).json({
+            success: false,
+            message: 'Folder path is required for local-folder mode'
+          });
+          return;
+        }
+
+        // フォルダの存在確認
+        if (!fs.existsSync(folderPath)) {
+          res.status(400).json({
+            success: false,
+            message: `Folder does not exist: ${folderPath}`
+          });
+          return;
+        }
+
+        const stats = fs.statSync(folderPath);
+        if (!stats.isDirectory()) {
+          res.status(400).json({
+            success: false,
+            message: `Path is not a directory: ${folderPath}`
+          });
+          return;
+        }
+
+        console.log(`Setting work folder to: ${folderPath}`);
+        await (this.videoService as any).changeVideoDirectory(folderPath);
+
+        const response: ApiResponse = {
+          success: true,
+          message: 'Work folder set successfully',
+          data: { newFolderPath: folderPath, mode: 'local-folder' }
+        };
+        res.json(response);
+        return;
+      }
+      
       // ブラウザからのファイル情報が提供された場合
       if ((mode === 'browser-selection' || mode === 'fallback-files') && videoFiles && Array.isArray(videoFiles)) {
         console.log(`Processing ${mode}: ${videoFiles.length} videos`);
