@@ -583,42 +583,128 @@ const VideoApp = {
         folderStatus.innerHTML = '<span style="color: red;">❌ フォルダが選択されていません</span>';
     },
 
-    // サーバー参照フォルダ選択ダイアログ機能
+    // サーバー参照フォルダ選択ダイアログ機能（新しい統一UI）
     async selectVideoFolder() {
-        const selectedFolderPath = document.getElementById('selected-folder-path');
-        const changeFolderBtn = document.getElementById('change-folder-btn');
-        const folderStatus = document.getElementById('folder-status');
+        this.showFolderSelectionModal();
+    },
 
-        // 既存のデータをクリア
-        selectedFolderPath.dataset.realFolderPath = '';
+    // フォルダ選択モーダルを表示
+    showFolderSelectionModal() {
+        const modal = document.getElementById('folder-selection-modal');
+        const platformDisplay = document.getElementById('platform-display');
+        
+        // プラットフォーム情報を表示
+        const platform = this.detectPlatform();
+        const platformName = this.getPlatformDisplayName(platform);
+        platformDisplay.textContent = `🖥️ 検出されたOS: ${platformName}`;
+        
+        // モーダル状態をリセット
+        this.resetModalState();
+        
+        // イベントリスナーを設定
+        this.setupModalEventListeners();
+        
+        // モーダルを表示
+        modal.style.display = 'block';
+    },
 
+    // プラットフォーム表示名を取得
+    getPlatformDisplayName(platform) {
+        switch (platform) {
+            case 'windows':
+                return 'Windows';
+            case 'macos':
+                return 'macOS';
+            case 'linux':
+                const isWSL = this.isWSLEnvironment();
+                return isWSL ? 'Linux (WSL)' : 'Linux';
+            default:
+                return '不明';
+        }
+    },
+
+    // モーダル状態をリセット
+    resetModalState() {
+        // ステータスメッセージをクリア
+        document.getElementById('dialog-status').textContent = '';
+        document.getElementById('manual-status').textContent = '';
+        document.getElementById('manual-path-input').value = '';
+        document.getElementById('path-suggestions').classList.remove('show');
+        document.getElementById('confirm-selection-btn').disabled = true;
+        
+        // モーダル全体の選択状態をリセット
+        this.selectedFolderPath = null;
+    },
+
+    // モーダルのイベントリスナーを設定
+    setupModalEventListeners() {
+        // 重複登録を防ぐため、既存のリスナーを削除
+        document.getElementById('dialog-select-btn').replaceWith(
+            document.getElementById('dialog-select-btn').cloneNode(true)
+        );
+        document.getElementById('browse-suggested-btn').replaceWith(
+            document.getElementById('browse-suggested-btn').cloneNode(true)
+        );
+        document.getElementById('manual-path-input').replaceWith(
+            document.getElementById('manual-path-input').cloneNode(true)
+        );
+        document.getElementById('confirm-selection-btn').replaceWith(
+            document.getElementById('confirm-selection-btn').cloneNode(true)
+        );
+        
+        // ダイアログ選択ボタン
+        document.getElementById('dialog-select-btn').addEventListener('click', 
+            () => this.handleDialogSelection());
+        
+        // パス候補表示ボタン
+        document.getElementById('browse-suggested-btn').addEventListener('click', 
+            () => this.showPathSuggestions());
+        
+        // 手動入力フィールド
+        const manualInput = document.getElementById('manual-path-input');
+        manualInput.addEventListener('input', () => this.handleManualPathInput());
+        manualInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                this.handleManualPathInput();
+            }
+        });
+        
+        // 選択確定ボタン
+        document.getElementById('confirm-selection-btn').addEventListener('click', 
+            () => this.confirmFolderSelection());
+    },
+
+    // ダイアログでフォルダ選択
+    async handleDialogSelection() {
+        const statusElement = document.getElementById('dialog-status');
+        
         try {
-            folderStatus.innerHTML = '<span style="color: blue;">📁 フォルダ選択ダイアログを起動中...</span>';
+            statusElement.textContent = '📁 ダイアログを起動中...';
+            statusElement.className = 'status-message info';
             
             // File System Access APIをサポートしているかチェック
             if ('showDirectoryPicker' in window) {
                 console.log('🔄 Using File System Access API (Modern browsers)');
                 const directoryHandle = await window.showDirectoryPicker();
                 
-                // フォルダ名を取得
+                // フォルダ名とパスを取得（推定）
                 const folderName = directoryHandle.name;
+                const platform = this.detectPlatform();
+                const currentUser = this.getCurrentUser();
                 
-                // よくあるパス候補から選択する方式
-                folderStatus.innerHTML = '<span style="color: blue;">📂 フォルダの場所を選択してください...</span>';
+                // プラットフォーム別のデフォルトパス候補を生成
+                const candidates = this.generatePlatformSpecificCandidates(folderName, currentUser, platform);
+                const suggestedPath = candidates.length > 0 ? candidates[0].path : 
+                    this.getDefaultPath(folderName, currentUser, platform);
                 
-                const userPath = await this.selectFolderLocation(folderName);
-
-                if (userPath) {
-                    // フォルダとして設定
-                    selectedFolderPath.textContent = `📁 選択済み: ${userPath}`;
-                    selectedFolderPath.dataset.realFolderPath = userPath;
-                    folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました</span>';
-                    
-                    changeFolderBtn.textContent = 'サーバー参照フォルダに設定';
-                    changeFolderBtn.disabled = false;
-                } else {
-                    folderStatus.innerHTML = '<span style="color: orange;">⚠️ フォルダパスの選択がキャンセルされました</span>';
-                }
+                this.selectedFolderPath = suggestedPath;
+                this.selectedDirectoryHandle = directoryHandle;
+                
+                statusElement.textContent = `✅ ダイアログで「${folderName}」が選択されました`;
+                statusElement.className = 'status-message success';
+                
+                document.getElementById('manual-path-input').value = suggestedPath;
+                document.getElementById('confirm-selection-btn').disabled = false;
                 
             } else {
                 // フォールバック: input[type="file"]を使用（webkitdirectory）
@@ -630,9 +716,9 @@ const VideoApp = {
                 fileInput.multiple = true;
                 fileInput.style.display = 'none';
                 
-                fileInput.addEventListener('change', async (event) => {
+                fileInput.addEventListener('change', (event) => {
                     const files = Array.from(event.target.files);
-
+                    
                     if (files.length > 0) {
                         // 最初のファイルからフォルダパスを抽出
                         const firstFile = files[0];
@@ -640,24 +726,24 @@ const VideoApp = {
                         const pathParts = relativePath.split('/');
                         const folderName = pathParts[0];
                         
-                        console.log('Relative path:', relativePath);
-                        console.log('Folder name:', folderName);
+                        // プラットフォーム別のパス候補を生成
+                        const platform = this.detectPlatform();
+                        const currentUser = this.getCurrentUser();
+                        const candidates = this.generatePlatformSpecificCandidates(folderName, currentUser, platform);
+                        const suggestedPath = candidates.length > 0 ? candidates[0].path : 
+                            this.getDefaultPath(folderName, currentUser, platform);
                         
-                        // フォルダ場所選択
-                        const userPath = await this.selectFolderLocation(folderName);
+                        this.selectedFolderPath = suggestedPath;
+                        this.selectedFiles = files;
                         
-                        if (userPath) {
-                            selectedFolderPath.textContent = `📁 選択済み: ${userPath}`;
-                            selectedFolderPath.dataset.realFolderPath = userPath;
-                            
-                            changeFolderBtn.disabled = false;
-                            changeFolderBtn.textContent = 'サーバー参照フォルダに設定';
-                            folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました</span>';
-                        } else {
-                            folderStatus.innerHTML = '<span style="color: orange;">⚠️ フォルダパスの選択がキャンセルされました</span>';
-                        }
+                        statusElement.textContent = `✅ 「${folderName}」フォルダが選択されました（${files.length}ファイル）`;
+                        statusElement.className = 'status-message success';
+                        
+                        document.getElementById('manual-path-input').value = suggestedPath;
+                        document.getElementById('confirm-selection-btn').disabled = false;
                     } else {
-                        folderStatus.innerHTML = '<span style="color: orange;">フォルダが選択されませんでした</span>';
+                        statusElement.textContent = '⚠️ フォルダが選択されませんでした';
+                        statusElement.className = 'status-message warning';
                     }
                     
                     document.body.removeChild(fileInput);
@@ -668,12 +754,131 @@ const VideoApp = {
             }
         } catch (error) {
             if (error.name === 'AbortError') {
-                folderStatus.innerHTML = '<span style="color: orange;">フォルダ選択がキャンセルされました</span>';
+                statusElement.textContent = '❌ フォルダ選択がキャンセルされました';
+                statusElement.className = 'status-message warning';
             } else {
                 console.error('Folder selection error:', error);
-                folderStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+                statusElement.textContent = `❌ エラー: ${error.message}`;
+                statusElement.className = 'status-message error';
             }
         }
+    },
+
+    // パス候補を表示
+    showPathSuggestions() {
+        const suggestionsContainer = document.getElementById('path-suggestions');
+        const manualInput = document.getElementById('manual-path-input');
+        
+        const platform = this.detectPlatform();
+        const currentUser = this.getCurrentUser();
+        
+        // 現在の入力値からフォルダ名を推測
+        let folderName = 'Videos';
+        const inputValue = manualInput.value.trim();
+        if (inputValue) {
+            const parts = inputValue.split(/[\/\\]/);
+            folderName = parts[parts.length - 1] || parts[parts.length - 2] || 'Videos';
+        }
+        
+        const candidates = this.generatePlatformSpecificCandidates(folderName, currentUser, platform);
+        
+        // 候補を表示
+        suggestionsContainer.innerHTML = '';
+        
+        candidates.forEach(candidate => {
+            const item = document.createElement('div');
+            item.className = 'suggestion-item';
+            
+            item.innerHTML = `
+                <div class="suggestion-label">${candidate.name}</div>
+                <div class="suggestion-path">${candidate.path}</div>
+            `;
+            
+            item.addEventListener('click', () => {
+                manualInput.value = candidate.path;
+                this.handleManualPathInput();
+                suggestionsContainer.classList.remove('show');
+            });
+            
+            suggestionsContainer.appendChild(item);
+        });
+        
+        suggestionsContainer.classList.add('show');
+    },
+
+    // 手動パス入力を処理
+    handleManualPathInput() {
+        const manualInput = document.getElementById('manual-path-input');
+        const statusElement = document.getElementById('manual-status');
+        const confirmBtn = document.getElementById('confirm-selection-btn');
+        
+        const inputPath = manualInput.value.trim();
+        
+        if (inputPath === '') {
+            statusElement.textContent = '';
+            statusElement.className = '';
+            confirmBtn.disabled = true;
+            this.selectedFolderPath = null;
+            return;
+        }
+        
+        // WSL環境でのパスアクセス権限制約を考慮し、手動入力時は検証をスキップ
+        // ユーザーが入力したパスをそのまま受け入れる
+        this.selectedFolderPath = inputPath;
+        statusElement.textContent = '✅ パスが入力されました (検証スキップ)';
+        statusElement.className = 'status-message success';
+        confirmBtn.disabled = false;
+    },
+
+    // フォルダパスを検証
+    validateFolderPath(path) {
+        if (!path) return false;
+        
+        const platform = this.detectPlatform();
+        
+        switch (platform) {
+            case 'windows':
+                // Windows形式のパス検証（例：C:\Users\username\folder）
+                return /^[A-Za-z]:\\/.test(path) || /^\\\\/.test(path);
+            case 'linux':
+            case 'macos':
+            default:
+                // Unix系形式のパス検証（例：/home/username/folder）
+                return /^\//.test(path);
+        }
+    },
+
+    // フォルダ選択を確定
+    async confirmFolderSelection() {
+        if (!this.selectedFolderPath) {
+            return;
+        }
+        
+        // メインUIを更新
+        const selectedFolderPath = document.getElementById('selected-folder-path');
+        const changeFolderBtn = document.getElementById('change-folder-btn');
+        const folderStatus = document.getElementById('folder-status');
+        
+        selectedFolderPath.textContent = `📁 選択済み: ${this.selectedFolderPath}`;
+        selectedFolderPath.dataset.realFolderPath = this.selectedFolderPath;
+        
+        changeFolderBtn.disabled = false;
+        changeFolderBtn.textContent = 'サーバー参照フォルダに設定';
+        folderStatus.innerHTML = '<span style="color: green;">✅ フォルダが選択されました</span>';
+        
+        // モーダルを閉じる
+        this.closeFolderSelectionModal();
+    },
+
+    // フォルダ選択モーダルを閉じる
+    closeFolderSelectionModal() {
+        const modal = document.getElementById('folder-selection-modal');
+        modal.style.display = 'none';
+        
+        // 状態をクリア
+        this.selectedFolderPath = null;
+        this.selectedDirectoryHandle = null;
+        this.selectedFiles = null;
     },
 
     // フォルダの場所を選択する（クロスプラットフォーム対応）
@@ -704,6 +909,26 @@ const VideoApp = {
                 defaultPath
             );
         }
+    },
+
+    // WSL環境かどうかを判定
+    isWSLEnvironment() {
+        // User Agentや環境変数からWSLを推測する簡易判定
+        const userAgent = navigator.userAgent.toLowerCase();
+        
+        // WSLでよくある特徴：
+        // 1. LinuxベースだがWindows環境で動作
+        // 2. /mnt/c などのマウントポイントが存在する可能性
+        
+        // 簡易的な判定として、Linuxプラットフォームで特定のパターンをチェック
+        if (this.detectPlatform() === 'linux') {
+            // より具体的なWSL判定はサーバーサイドで行うか、
+            // または実際のファイルシステムチェックが必要
+            // ここでは保守的にtrueを返してWSL候補を表示
+            return true;
+        }
+        
+        return false;
     },
 
     // プラットフォーム検出
@@ -743,6 +968,17 @@ const VideoApp = {
                     { name: 'ビデオ', path: `/home/${currentUser}/Videos/${folderName}` },
                     { name: 'ピクチャ', path: `/home/${currentUser}/Pictures/${folderName}` }
                 );
+                
+                // WSL環境用の Windows パスも追加
+                if (this.isWSLEnvironment()) {
+                    candidates.push(
+                        { name: 'Windows デスクトップ', path: `/mnt/c/Users/${currentUser}/Desktop/${folderName}` },
+                        { name: 'Windows ダウンロード', path: `/mnt/c/Users/${currentUser}/Downloads/${folderName}` },
+                        { name: 'Windows ドキュメント', path: `/mnt/c/Users/${currentUser}/Documents/${folderName}` },
+                        { name: 'Windows ビデオ', path: `/mnt/c/Users/${currentUser}/Videos/${folderName}` },
+                        { name: 'D ドライブ', path: `/mnt/d/${folderName}` }
+                    );
+                }
                 break;
                 
             case 'macos':
@@ -1630,6 +1866,7 @@ window.getThumbnailStats = () => VideoApp.getThumbnailStats();
 window.closeVideoPlayer = () => VideoApp.closeVideoPlayer();
 window.changeVideoFolder = () => VideoApp.changeVideoFolder();
 window.selectVideoFolder = () => VideoApp.selectVideoFolder();
+window.closeFolderSelectionModal = () => VideoApp.closeFolderSelectionModal();
 window.runThumbnailTests = () => {
     console.log('🧪 Running thumbnail tests...');
     // テスト関数をここに実装
