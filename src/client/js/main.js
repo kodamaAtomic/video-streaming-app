@@ -26,6 +26,9 @@ const VideoApp = {
         settingMode: 'none' // 'none', 'setting-start', 'setting-end'
     },
     
+    // キーボードヘルプ用の状態
+    helpKeydownHandler: null,
+    
     // 初期化
     init() {
         console.log('🚀 VideoApp initializing...');
@@ -106,6 +109,13 @@ const VideoApp = {
         document.addEventListener('keydown', (e) => {
             // 入力フィールドにフォーカスがある場合はショートカットを無効化
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+            
+            // ?キーは常にヘルプ表示（どのモードでも）
+            if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
+                e.preventDefault();
+                this.toggleKeyboardHelp();
                 return;
             }
             
@@ -421,6 +431,9 @@ const VideoApp = {
         
         // リピート状態をリセット
         this.resetRepeatSection();
+        
+        // キーボードヘルプが表示されている場合は非表示
+        this.hideKeyboardHelp();
         
         if (this.elements.videoPlayer) {
             this.elements.videoPlayer.pause();
@@ -1192,6 +1205,181 @@ const VideoApp = {
                 statusElement.style.display = 'none';
             }
         }, 3000);
+    },
+    
+    // キーボードヘルプの表示・非表示切り替え
+    toggleKeyboardHelp() {
+        let helpOverlay = document.getElementById('keyboard-help-overlay');
+        
+        if (helpOverlay && helpOverlay.style.display === 'flex') {
+            // すでに表示されている場合は非表示
+            helpOverlay.style.display = 'none';
+            document.body.style.overflow = this.isPlayerMode ? 'hidden' : 'auto';
+        } else {
+            // 表示されていない場合は表示
+            this.showKeyboardHelp();
+        }
+    },
+    
+    // キーボードヘルプオーバーレイを表示
+    showKeyboardHelp() {
+        // 既存のヘルプオーバーレイを削除
+        this.hideKeyboardHelp();
+        
+        // ヘルプオーバーレイを作成
+        const helpOverlay = document.createElement('div');
+        helpOverlay.id = 'keyboard-help-overlay';
+        helpOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        `;
+        
+        // ヘルプコンテンツを作成
+        const helpContent = document.createElement('div');
+        helpContent.style.cssText = `
+            background: #1a1a1a;
+            color: #ffffff;
+            border-radius: 12px;
+            padding: 30px 40px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            border: 1px solid #333;
+        `;
+        
+        const currentMode = this.isPlayerMode && this.elements.videoModal.style.display === 'block' ? 'player' : 'grid';
+        
+        helpContent.innerHTML = `
+            <div style="text-align: center; margin-bottom: 25px;">
+                <h2 style="color: #4CAF50; margin: 0 0 10px 0; font-size: 24px;">⌨️ キーボードショートカット</h2>
+                <p style="margin: 0; color: #aaa; font-size: 14px;">現在のモード: ${currentMode === 'player' ? 'ビデオプレイヤー' : 'グリッドナビゲーション'}</p>
+            </div>
+            
+            ${currentMode === 'player' ? `
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2196F3; margin-bottom: 15px; font-size: 18px;">🎬 ビデオプレイヤー</h3>
+                <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px 20px; align-items: center;">
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">K</kbd>
+                    <span>再生・一時停止</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Space</kbd>
+                    <span>2区間リピート設定</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">C</kbd>
+                    <span>リピート区間リセット</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">←</kbd>
+                    <span>5秒戻る</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">→</kbd>
+                    <span>5秒進む</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">J</kbd>
+                    <span>10秒戻る</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">L</kbd>
+                    <span>10秒進む</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">M</kbd>
+                    <span>ミュート・ミュート解除</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Escape</kbd>
+                    <span>プレイヤーを閉じる</span>
+                </div>
+            </div>
+            
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #FF9800; margin-bottom: 15px; font-size: 18px;">🔁 2区間リピート機能</h3>
+                <div style="background: #2a2a2a; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.6;">
+                    <p style="margin: 0 0 10px 0;"><strong>1.</strong> 開始点で <kbd style="background: #333; padding: 2px 6px; border-radius: 3px;">Space</kbd> を押す</p>
+                    <p style="margin: 0 0 10px 0;"><strong>2.</strong> 終了点で再度 <kbd style="background: #333; padding: 2px 6px; border-radius: 3px;">Space</kbd> を押す</p>
+                    <p style="margin: 0 0 10px 0;"><strong>3.</strong> 区間が自動的にリピート再生される</p>
+                    <p style="margin: 0;"><strong>4.</strong> <kbd style="background: #333; padding: 2px 6px; border-radius: 3px;">C</kbd> でリピート解除</p>
+                </div>
+            </div>
+            ` : `
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2196F3; margin-bottom: 15px; font-size: 18px;">🎯 グリッドナビゲーション</h3>
+                <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px 20px; align-items: center;">
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">↑ ↓ ← →</kbd>
+                    <span>サムネイル間の移動</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Enter</kbd>
+                    <span>選択中の動画を再生</span>
+                    
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">1 / 2 / 3</kbd>
+                    <span>グリッドサイズ切り替え (24/48/96)</span>
+                </div>
+            </div>
+            `}
+            
+            <div style="margin-bottom: 20px;">
+                <h3 style="color: #9C27B0; margin-bottom: 15px; font-size: 18px;">💡 共通操作</h3>
+                <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px 20px; align-items: center;">
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">?</kbd>
+                    <span>このヘルプを表示・非表示</span>
+                </div>
+            </div>
+            
+            <div style="text-align: center; padding-top: 20px; border-top: 1px solid #333;">
+                <p style="margin: 0; color: #aaa; font-size: 14px;">
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">?</kbd> または 
+                    <kbd style="background: #333; padding: 4px 8px; border-radius: 4px; font-size: 12px;">Escape</kbd> でこのヘルプを閉じる
+                </p>
+            </div>
+        `;
+        
+        helpOverlay.appendChild(helpContent);
+        document.body.appendChild(helpOverlay);
+        document.body.style.overflow = 'hidden';
+        
+        // クリックまたはEscapeで閉じる
+        helpOverlay.addEventListener('click', (e) => {
+            if (e.target === helpOverlay) {
+                this.hideKeyboardHelp();
+            }
+        });
+        
+        // キーダウンハンドラーを作成してプロパティに保存
+        this.helpKeydownHandler = (e) => {
+            const helpOverlay = document.getElementById('keyboard-help-overlay');
+            if (helpOverlay && helpOverlay.style.display !== 'none') {
+                if (e.key === 'Escape' || e.key === '?' || (e.key === '/' && e.shiftKey)) {
+                    e.preventDefault();
+                    this.hideKeyboardHelp();
+                }
+            }
+        };
+        
+        // イベントリスナーを追加
+        document.addEventListener('keydown', this.helpKeydownHandler);
+    },
+    
+    // キーボードヘルプを非表示
+    hideKeyboardHelp() {
+        const helpOverlay = document.getElementById('keyboard-help-overlay');
+        if (helpOverlay) {
+            helpOverlay.remove();
+        }
+        
+        // イベントリスナーを削除
+        if (this.helpKeydownHandler) {
+            document.removeEventListener('keydown', this.helpKeydownHandler);
+            this.helpKeydownHandler = null;
+        }
+        
+        // オーバーフローを元に戻す
+        document.body.style.overflow = this.isPlayerMode ? 'hidden' : 'auto';
     }
 };
 
