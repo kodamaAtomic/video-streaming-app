@@ -14,6 +14,10 @@ const VideoApp = {
     currentGridSize: 24,
     currentVideos: [],
     
+    // キーボードナビゲーション用の状態
+    selectedThumbnailIndex: -1,
+    isPlayerMode: false,
+    
     // 初期化
     init() {
         console.log('🚀 VideoApp initializing...');
@@ -84,6 +88,153 @@ const VideoApp = {
                 this.closeVideoPlayer();
             }
         });
+        
+        // キーボードショートカット
+        this.setupKeyboardShortcuts();
+    },
+    
+    // キーボードショートカットの設定
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // 入力フィールドにフォーカスがある場合はショートカットを無効化
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+            
+            // プレイヤーモード（モーダル表示中）
+            if (this.isPlayerMode && this.elements.videoModal.style.display === 'block') {
+                this.handlePlayerShortcuts(e);
+            } else {
+                // グリッドナビゲーションモード
+                this.handleGridShortcuts(e);
+            }
+        });
+    },
+    
+    // グリッドナビゲーション用ショートカット
+    handleGridShortcuts(e) {
+        const currentVideos = this.getCurrentDisplayedVideos();
+        if (currentVideos.length === 0) return;
+        
+        switch (e.key) {
+            case 'ArrowRight':
+                e.preventDefault();
+                this.moveSelection(1);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                this.moveSelection(-1);
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                this.moveSelection(this.getGridColumns());
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.moveSelection(-this.getGridColumns());
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (this.selectedThumbnailIndex >= 0 && this.selectedThumbnailIndex < currentVideos.length) {
+                    this.openVideoPlayer(currentVideos[this.selectedThumbnailIndex]);
+                }
+                break;
+        }
+    },
+    
+    // プレイヤー用ショートカット
+    handlePlayerShortcuts(e) {
+        const video = this.elements.videoPlayer;
+        if (!video) return;
+        
+        switch (e.key) {
+            case ' ':
+            case 'k':
+            case 'K':
+                e.preventDefault();
+                if (video.paused) {
+                    video.play();
+                } else {
+                    video.pause();
+                }
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                video.currentTime = Math.max(0, video.currentTime - 5);
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                video.currentTime = Math.min(video.duration, video.currentTime + 5);
+                break;
+            case 'j':
+            case 'J':
+                e.preventDefault();
+                video.currentTime = Math.max(0, video.currentTime - 10);
+                break;
+            case 'l':
+            case 'L':
+                e.preventDefault();
+                video.currentTime = Math.min(video.duration, video.currentTime + 10);
+                break;
+            case 'm':
+            case 'M':
+                e.preventDefault();
+                video.muted = !video.muted;
+                console.log(`🔊 Video ${video.muted ? 'muted' : 'unmuted'}`);
+                break;
+            case 'Escape':
+                e.preventDefault();
+                this.closeVideoPlayer();
+                break;
+        }
+    },
+    
+    // 現在表示中の動画一覧を取得
+    getCurrentDisplayedVideos() {
+        return this.currentVideos.slice(0, this.currentGridSize);
+    },
+    
+    // グリッドの列数を計算
+    getGridColumns() {
+        // CSS Grid の列数に基づいて計算
+        if (this.currentGridSize === 24) return 6;      // 6x4
+        if (this.currentGridSize === 48) return 8;      // 8x6
+        if (this.currentGridSize === 96) return 12;     // 12x8
+        return 6; // デフォルト
+    },
+    
+    // 選択位置を移動
+    moveSelection(delta) {
+        const currentVideos = this.getCurrentDisplayedVideos();
+        if (currentVideos.length === 0) return;
+        
+        // 初回選択
+        if (this.selectedThumbnailIndex < 0) {
+            this.selectedThumbnailIndex = 0;
+        } else {
+            // 新しい位置を計算
+            const newIndex = this.selectedThumbnailIndex + delta;
+            this.selectedThumbnailIndex = Math.max(0, Math.min(currentVideos.length - 1, newIndex));
+        }
+        
+        this.updateThumbnailSelection();
+    },
+    
+    // サムネイル選択状態を更新
+    updateThumbnailSelection() {
+        // すべてのサムネイルから選択状態を除去
+        const thumbnails = this.elements.thumbnailGrid.querySelectorAll('.thumbnail');
+        thumbnails.forEach(thumb => thumb.classList.remove('selected'));
+        
+        // 現在選択中のサムネイルにクラスを追加
+        if (this.selectedThumbnailIndex >= 0 && this.selectedThumbnailIndex < thumbnails.length) {
+            thumbnails[this.selectedThumbnailIndex].classList.add('selected');
+            // スクロールして表示
+            thumbnails[this.selectedThumbnailIndex].scrollIntoView({
+                behavior: 'smooth',
+                block: 'nearest'
+            });
+        }
     },
     
     // グリッドサイズ変更
@@ -101,6 +252,9 @@ const VideoApp = {
         // グリッドクラスを更新
         this.elements.thumbnailGrid.className = `grid-${count}`;
         this.currentGridSize = count;
+        
+        // 選択状態をリセット
+        this.selectedThumbnailIndex = -1;
         
         // 表示するビデオ数を制限
         this.displayThumbnails(this.currentVideos.slice(0, count));
@@ -153,6 +307,13 @@ const VideoApp = {
             this.createThumbnailElement(video, index);
         });
         
+        // 初回表示時に最初のサムネイルを選択状態にする
+        if (videos.length > 0 && this.selectedThumbnailIndex < 0) {
+            this.selectedThumbnailIndex = 0;
+            // 少し遅延してから選択状態を適用（DOM更新完了後）
+            setTimeout(() => this.updateThumbnailSelection(), 100);
+        }
+        
         console.log(`📊 Displayed ${videos.length} thumbnails in ${this.currentGridSize} grid mode`);
     },
     
@@ -202,6 +363,9 @@ const VideoApp = {
         
         // クリックイベント（モーダルで再生）
         thumbnailElement.addEventListener('click', () => {
+            // クリックされたサムネイルを選択状態にする
+            this.selectedThumbnailIndex = index;
+            this.updateThumbnailSelection();
             this.openVideoPlayer(video);
         });
         
@@ -211,6 +375,9 @@ const VideoApp = {
     // ビデオプレイヤーを開く
     openVideoPlayer(video) {
         console.log(`▶️ Opening video player for: ${video.title}`);
+        
+        // プレイヤーモードに切り替え
+        this.isPlayerMode = true;
         
         if (this.elements.modalTitle) {
             this.elements.modalTitle.textContent = video.title;
@@ -229,6 +396,9 @@ const VideoApp = {
     // ビデオプレイヤーを閉じる
     closeVideoPlayer() {
         console.log('🔒 Closing video player');
+        
+        // プレイヤーモード終了
+        this.isPlayerMode = false;
         
         if (this.elements.videoPlayer) {
             this.elements.videoPlayer.pause();

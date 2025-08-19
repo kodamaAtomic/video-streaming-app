@@ -598,6 +598,39 @@ h1 {
     box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
 }
 
+/* キーボードナビゲーション用の選択状態 */
+.thumbnail.selected {
+    border: 3px solid var(--accent-primary) !important;
+    box-shadow: 0 0 20px rgba(0, 123, 255, 0.6) !important;
+    transform: translateY(-4px) scale(1.02);
+    background: linear-gradient(135deg, var(--bg-secondary), rgba(0, 123, 255, 0.1));
+}
+
+.thumbnail.selected::before {
+    content: '▶';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2rem;
+    color: var(--accent-primary);
+    z-index: 5;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+
+.thumbnail.selected:hover::before {
+    opacity: 1;
+}
+
 /* モーダルプレイヤー */
 .modal {
     display: none;
