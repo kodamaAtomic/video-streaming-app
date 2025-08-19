@@ -87,6 +87,57 @@
         </div>
     </div>
 
+    <!-- フォルダ選択モーダル -->
+    <div id="folder-selection-modal" class="modal">
+        <div class="modal-content folder-selection-content">
+            <div class="modal-header">
+                <h2>📁 フォルダ選択</h2>
+                <span class="modal-close" onclick="closeFolderSelectionModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="platform-info">
+                    <span id="platform-display"></span>
+                </div>
+                
+                <div class="selection-methods">
+                    <div class="method-section">
+                        <h3>🎯 ファイルダイアログで選択</h3>
+                        <p>ブラウザのファイル選択ダイアログを使用してフォルダを選択します</p>
+                        <button id="dialog-select-btn" class="btn btn-primary">
+                            📂 ダイアログを開く
+                        </button>
+                        <div id="dialog-status" class="status-message"></div>
+                    </div>
+                    
+                    <div class="divider">または</div>
+                    
+                    <div class="method-section">
+                        <h3>✏️ パスを手動入力</h3>
+                        <p>フォルダの完全パスを直接入力します</p>
+                        <div class="path-input-group">
+                            <input type="text" id="manual-path-input" placeholder="フォルダのフルパスを入力...">
+                            <button id="browse-suggested-btn" class="btn btn-secondary">
+                                💡 候補を表示
+                            </button>
+                        </div>
+                        <div id="path-suggestions" class="path-suggestions"></div>
+                        <div id="manual-status" class="status-message"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button id="confirm-selection-btn" class="btn btn-success" disabled>
+                    ✅ 選択確定
+                </button>
+                <button class="btn btn-secondary" onclick="closeFolderSelectionModal()">
+                    ❌ キャンセル
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- メインJavaScriptファイル -->
     <script src="/js/main.js"></script>
 </body>
