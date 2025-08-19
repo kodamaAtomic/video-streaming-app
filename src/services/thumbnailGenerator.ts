@@ -251,6 +251,81 @@ export class ThumbnailGenerator {
     });
   }
 
+  // 動画メタデータを取得してアスペクト比を計算
+  private async getVideoMetadata(videoPath: string): Promise<{
+    width: number;
+    height: number;
+    aspectRatio: number;
+    duration: number;
+  }> {
+    return new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(videoPath, (err: any, metadata: any) => {
+        if (err) {
+          console.error('FFprobe error:', err);
+          reject(err);
+          return;
+        }
+
+        try {
+          const videoStream = metadata.streams.find((stream: any) => stream.codec_type === 'video');
+          
+          if (!videoStream) {
+            reject(new Error('No video stream found'));
+            return;
+          }
+
+          const width = videoStream.width || 1920;
+          const height = videoStream.height || 1080;
+          const aspectRatio = width / height;
+          const duration = parseFloat(metadata.format.duration) || 0;
+
+          console.log(`📊 Video metadata: ${width}x${height} (${aspectRatio.toFixed(2)}:1), ${duration.toFixed(1)}s`);
+
+          resolve({
+            width,
+            height,
+            aspectRatio,
+            duration
+          });
+        } catch (error) {
+          console.error('Error parsing metadata:', error);
+          // デフォルト値で続行
+          resolve({
+            width: 1920,
+            height: 1080,
+            aspectRatio: 1.78,
+            duration: 0
+          });
+        }
+      });
+    });
+  }
+
+  // アスペクト比に基づいて最適なサムネイルサイズを計算
+  private calculateOptimalSize(
+    originalWidth: number, 
+    originalHeight: number, 
+    targetHeight: number = 360
+  ): { width: number; height: number; size: string } {
+    // 元のアスペクト比を維持しながら、指定した高さに合わせる
+    const aspectRatio = originalWidth / originalHeight;
+    const width = Math.round(targetHeight * aspectRatio);
+    
+    // 最小/最大幅の制限
+    const minWidth = 240;
+    const maxWidth = 640;
+    const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, width));
+    const constrainedHeight = Math.round(constrainedWidth / aspectRatio);
+    
+    console.log(`📐 Size calculation: ${originalWidth}x${originalHeight} → ${constrainedWidth}x${constrainedHeight} (${aspectRatio.toFixed(2)}:1)`);
+    
+    return {
+      width: constrainedWidth,
+      height: constrainedHeight,
+      size: `${constrainedWidth}x${constrainedHeight}`
+    };
+  }
+
   private async ensureThumbnailDir(): Promise<void> {
     try {
       await fs.access(this.thumbnailDir);
@@ -268,16 +343,14 @@ export class ThumbnailGenerator {
   ): Promise<string> {
     const {
       timemarks = ['25%'],
-      size = '320x240',
       filename = `${videoId}_thumbnail.png`
     } = options;
 
     const thumbnailPath = path.join(this.thumbnailDir, filename);
 
-    console.log(`🎬 Generating thumbnail...`);
+    console.log(`🎬 Generating adaptive thumbnail...`);
     console.log(`📹 Video path: ${videoPath}`);
     console.log(`🖼️ Thumbnail path: ${thumbnailPath}`);
-    console.log(`📁 Thumbnail directory: ${this.thumbnailDir}`);
 
     // ディレクトリの存在確認
     if (!fsSynce.existsSync(this.thumbnailDir)) {
@@ -290,66 +363,79 @@ export class ThumbnailGenerator {
       throw new Error(`Video file not found: ${videoPath}`);
     }
 
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error('Thumbnail generation timeout (60 seconds)'));
-      }, 60000);
+    try {
+      // 動画メタデータを取得
+      const metadata = await this.getVideoMetadata(videoPath);
+      
+      // 最適なサイズを計算（高解像度で生成）
+      const optimalSize = this.calculateOptimalSize(metadata.width, metadata.height, 480);
+      
+      console.log(`🎯 Generating thumbnail with size: ${optimalSize.size}`);
+      
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Thumbnail generation timeout (60 seconds)'));
+        }, 60000);
 
-      try {
-        // 最適化されたFFmpegコマンド設定
-        const ffmpegCommand = ffmpeg(videoPath)
-          .inputOptions([
-            '-threads 2',      // スレッド数制限
-            '-y',              // 既存ファイル上書き
-          ])
-          .outputOptions([
-            '-vframes 1',      // 1フレームのみ
-            '-q:v 2',          // 高品質（1-31、値が低いほど高品質）
-            '-preset ultrafast' // 最速プリセット
-          ]);
+        try {
+          // 最適化されたFFmpegコマンド設定
+          const ffmpegCommand = ffmpeg(videoPath)
+            .inputOptions([
+              '-threads 2',      // スレッド数制限
+              '-y',              // 既存ファイル上書き
+            ])
+            .outputOptions([
+              '-vframes 1',      // 1フレームのみ
+              '-q:v 2',          // 高品質（1-31、値が低いほど高品質）
+              '-preset ultrafast' // 最速プリセット
+            ]);
 
-        ffmpegCommand
-          .screenshots({
-            timemarks,
-            size,
-            filename,
-            folder: this.thumbnailDir
-          })
-          .on('start', (commandLine: string) => {
-            console.log(`🚀 FFmpeg command: ${commandLine}`);
-          })
-          .on('progress', (progress: any) => {
-            if (progress.percent) {
-              console.log(`📊 Thumbnail progress: ${Math.round(progress.percent)}%`);
-            }
-          })
-          .on('end', () => {
-            clearTimeout(timeout);
-            console.log(`✅ Thumbnail generation completed`);
-            
-            // ファイルが実際に作成されたか確認
-            setTimeout(() => {
-              if (fsSynce.existsSync(thumbnailPath)) {
-                console.log(`✅ Thumbnail file confirmed: ${thumbnailPath}`);
-                resolve(thumbnailPath);
-              } else {
-                console.log(`❌ Thumbnail file not found: ${thumbnailPath}`);
-                reject(new Error(`Thumbnail file was not created: ${thumbnailPath}`));
+          ffmpegCommand
+            .screenshots({
+              timemarks,
+              size: optimalSize.size, // 動的に計算されたサイズ
+              filename,
+              folder: this.thumbnailDir
+            })
+            .on('start', (commandLine: string) => {
+              console.log(`🚀 FFmpeg [${metadata.width}x${metadata.height}→${optimalSize.size}]: ${commandLine.substring(0, 100)}...`);
+            })
+            .on('progress', (progress: any) => {
+              if (progress.percent) {
+                console.log(`📊 Thumbnail progress: ${Math.round(progress.percent)}%`);
               }
-            }, 500); // 待機時間を短縮
-          })
-          .on('error', (error: any) => {
-            clearTimeout(timeout);
-            console.error('❌ FFmpeg error:', error);
-            const errorMessage = error && error.message ? error.message : String(error);
-            reject(new Error('Error generating thumbnail: ' + errorMessage));
-          });
-      } catch (error) {
-        clearTimeout(timeout);
-        console.error('❌ FFmpeg setup error:', error);
-        reject(error);
-      }
-    });
+            })
+            .on('end', () => {
+              clearTimeout(timeout);
+              console.log(`✅ Thumbnail generation completed`);
+              
+              // ファイルが実際に作成されたか確認
+              setTimeout(() => {
+                if (fsSynce.existsSync(thumbnailPath)) {
+                  console.log(`✅ Thumbnail file confirmed: ${thumbnailPath}`);
+                  resolve(thumbnailPath);
+                } else {
+                  console.log(`❌ Thumbnail file not found: ${thumbnailPath}`);
+                  reject(new Error(`Thumbnail file was not created: ${thumbnailPath}`));
+                }
+              }, 500); // 待機時間を短縮
+            })
+            .on('error', (error: any) => {
+              clearTimeout(timeout);
+              console.error('❌ FFmpeg error:', error);
+              const errorMessage = error && error.message ? error.message : String(error);
+              reject(new Error('Error generating thumbnail: ' + errorMessage));
+            });
+        } catch (error) {
+          clearTimeout(timeout);
+          console.error('❌ FFmpeg setup error:', error);
+          reject(error);
+        }
+      });
+    } catch (error) {
+      console.error('❌ Error extracting video metadata:', error);
+      throw new Error(`Failed to generate thumbnail: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   // 並列処理でサムネイル生成
@@ -395,7 +481,7 @@ export class ThumbnailGenerator {
         videoId,
         timemark: '25%',
         filename,
-        size: '320x240'
+        size: '320x180' // 16:9アスペクト比
       });
     }
 
@@ -444,19 +530,14 @@ export class ThumbnailGenerator {
       this.activeJobs.add(job.id);
       
       try {
-        const thumbnailPath = await this.generateOptimizedThumbnail(
+        // 新しい動的アスペクト比機能を使用
+        const thumbnailPath = await this.generateThumbnail(
           job.videoPath,
           job.videoId,
           {
             timemarks: [job.timemark],
-            size: job.size,
             filename: job.filename
-          },
-          timeoutMs,
-          optimizeSettings,
-          useGPU,
-          lowQuality,
-          partialRead
+          }
         );
         
         return thumbnailPath;
@@ -476,7 +557,7 @@ export class ThumbnailGenerator {
     lowQuality: boolean = false,
     partialRead: boolean = false
   ): Promise<string> {
-    const { timemarks = ['25%'], size = '320x240', filename } = options;
+    const { timemarks = ['25%'], size = '320x180', filename } = options; // 16:9アスペクト比
     const thumbnailPath = path.join(this.thumbnailDir, filename!);
 
     // 動画ファイルの存在確認

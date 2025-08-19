@@ -358,6 +358,10 @@ const VideoApp = {
         thumbnailElement.className = 'thumbnail';
         thumbnailElement.style.position = 'relative';
         
+        // 画像コンテナ（16:9アスペクト比維持用）
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'thumbnail-image-container';
+        
         // 画像要素
         const img = document.createElement('img');
         img.src = video.thumbnailUrl;
@@ -386,11 +390,12 @@ const VideoApp = {
             const placeholder = document.createElement('div');
             placeholder.className = 'thumbnail-placeholder';
             placeholder.textContent = 'サムネイル読み込み失敗';
-            img.parentNode.replaceChild(placeholder, img);
+            imageContainer.replaceChild(placeholder, img);
         };
         
         // 要素組み立て
-        thumbnailElement.appendChild(img);
+        imageContainer.appendChild(img);
+        thumbnailElement.appendChild(imageContainer);
         thumbnailElement.appendChild(title);
         thumbnailElement.appendChild(deleteButton);
         

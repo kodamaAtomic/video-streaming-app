@@ -465,8 +465,8 @@ h1 {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
 }
 
-.grid-24 .thumbnail img {
-    height: 180px;
+.grid-24 .thumbnail-image-container {
+    aspect-ratio: 16/9;
 }
 
 .grid-24 .thumbnail p {
@@ -480,8 +480,8 @@ h1 {
     gap: 15px;
 }
 
-.grid-48 .thumbnail img {
-    height: 140px;
+.grid-48 .thumbnail-image-container {
+    aspect-ratio: 16/9;
 }
 
 .grid-48 .thumbnail p {
@@ -495,8 +495,8 @@ h1 {
     gap: 10px;
 }
 
-.grid-96 .thumbnail img {
-    height: 100px;
+.grid-96 .thumbnail-image-container {
+    aspect-ratio: 16/9;
 }
 
 .grid-96 .thumbnail p {
@@ -520,6 +520,8 @@ h1 {
     border: 1px solid var(--border-color);
     box-shadow: 0 8px 32px var(--shadow-light);
     position: relative;
+    display: flex;
+    flex-direction: column;
 }
 
 .thumbnail:hover {
@@ -528,9 +530,21 @@ h1 {
     border-color: var(--accent-primary);
 }
 
+/* サムネイル画像コンテナ */
+.thumbnail-image-container {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16/9; /* 16:9のアスペクト比を強制 */
+    overflow: hidden;
+    background: var(--bg-tertiary);
+    border-radius: 15px 15px 0 0; /* 上部のみ角丸 */
+}
+
 .thumbnail img {
     width: 100%;
-    object-fit: cover;
+    height: 100%;
+    object-fit: cover; /* アスペクト比を維持しつつクロップ */
+    object-position: center; /* 中央部分を表示 */
     display: block;
     transition: transform 0.3s ease;
 }
@@ -550,23 +564,26 @@ h1 {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex-grow: 1; /* タイトル部分を拡張 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0 0 15px 15px; /* 下部のみ角丸 */
 }
 
 .thumbnail-placeholder {
     width: 100%;
+    aspect-ratio: 16/9; /* プレースホルダも16:9に統一 */
     background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
     display: flex;
     align-items: center;
     justify-content: center;
     border: 2px dashed var(--border-color);
+    border-radius: 15px 15px 0 0; /* 上部のみ角丸 */
     color: var(--text-muted);
     font-size: 14px;
     font-weight: 500;
 }
-
-.grid-24 .thumbnail-placeholder { height: 180px; }
-.grid-48 .thumbnail-placeholder { height: 140px; }
-.grid-96 .thumbnail-placeholder { height: 100px; }
 
 /* 削除ボタンのスタイリング */
 .thumbnail button {
