@@ -18,6 +18,14 @@ const VideoApp = {
     selectedThumbnailIndex: -1,
     isPlayerMode: false,
     
+    // 2区間リピート機能の状態
+    repeatState: {
+        startTime: null,    // 開始点（秒）
+        endTime: null,      // 終了点（秒）
+        isActive: false,    // リピートモード有効/無効
+        settingMode: 'none' // 'none', 'setting-start', 'setting-end'
+    },
+    
     // 初期化
     init() {
         console.log('🚀 VideoApp initializing...');
@@ -149,6 +157,9 @@ const VideoApp = {
         
         switch (e.key) {
             case ' ':
+                e.preventDefault();
+                this.handleRepeatSetting();
+                break;
             case 'k':
             case 'K':
                 e.preventDefault();
@@ -157,6 +168,11 @@ const VideoApp = {
                 } else {
                     video.pause();
                 }
+                break;
+            case 'c':
+            case 'C':
+                e.preventDefault();
+                this.resetRepeatSection();
                 break;
             case 'ArrowLeft':
                 e.preventDefault();
@@ -379,6 +395,9 @@ const VideoApp = {
         // プレイヤーモードに切り替え
         this.isPlayerMode = true;
         
+        // リピート状態をリセット
+        this.resetRepeatSection();
+        
         if (this.elements.modalTitle) {
             this.elements.modalTitle.textContent = video.title;
         }
@@ -399,6 +418,9 @@ const VideoApp = {
         
         // プレイヤーモード終了
         this.isPlayerMode = false;
+        
+        // リピート状態をリセット
+        this.resetRepeatSection();
         
         if (this.elements.videoPlayer) {
             this.elements.videoPlayer.pause();
@@ -1038,6 +1060,138 @@ const VideoApp = {
             console.error('Error removing registered folder:', error);
             registeredStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
         }
+    },
+    
+    // 2区間リピート機能 - 区間設定処理
+    handleRepeatSetting() {
+        const video = this.elements.videoPlayer;
+        if (!video) return;
+        
+        const currentTime = video.currentTime;
+        
+        switch (this.repeatState.settingMode) {
+            case 'none':
+                // 開始点設定モード
+                this.repeatState.startTime = currentTime;
+                this.repeatState.settingMode = 'setting-start';
+                this.showRepeatStatus(`🔴 リピート開始点設定: ${this.formatTime(currentTime)}`);
+                console.log(`🔴 Repeat start time set: ${currentTime.toFixed(2)}s`);
+                break;
+                
+            case 'setting-start':
+                // 終了点設定とリピート開始
+                this.repeatState.endTime = currentTime;
+                this.repeatState.settingMode = 'setting-end';
+                this.repeatState.isActive = true;
+                
+                // 開始点より前の場合は入れ替え
+                if (this.repeatState.endTime < this.repeatState.startTime) {
+                    [this.repeatState.startTime, this.repeatState.endTime] = [this.repeatState.endTime, this.repeatState.startTime];
+                }
+                
+                this.showRepeatStatus(`🔁 リピート設定完了: ${this.formatTime(this.repeatState.startTime)} ～ ${this.formatTime(this.repeatState.endTime)}`);
+                console.log(`🔁 Repeat section set: ${this.repeatState.startTime.toFixed(2)}s - ${this.repeatState.endTime.toFixed(2)}s`);
+                
+                // リピートイベントリスナーを設定
+                this.setupRepeatListener();
+                break;
+                
+            case 'setting-end':
+                // 新しい区間設定開始（既存区間をリセット）
+                this.resetRepeatSection();
+                this.handleRepeatSetting(); // 再帰呼び出しで新しい設定開始
+                break;
+        }
+    },
+    
+    // リピート区間リセット
+    resetRepeatSection() {
+        this.repeatState.startTime = null;
+        this.repeatState.endTime = null;
+        this.repeatState.isActive = false;
+        this.repeatState.settingMode = 'none';
+        
+        // リピートイベントリスナーを削除
+        this.removeRepeatListener();
+        
+        this.showRepeatStatus('🔄 リピート区間をリセットしました');
+        console.log('🔄 Repeat section reset');
+    },
+    
+    // リピートリスナー設定
+    setupRepeatListener() {
+        const video = this.elements.videoPlayer;
+        if (!video) return;
+        
+        // 既存のリスナーがあれば削除
+        this.removeRepeatListener();
+        
+        // 新しいリスナーを設定
+        this.repeatListener = () => {
+            if (this.repeatState.isActive && 
+                this.repeatState.startTime !== null && 
+                this.repeatState.endTime !== null) {
+                
+                if (video.currentTime >= this.repeatState.endTime) {
+                    video.currentTime = this.repeatState.startTime;
+                    console.log(`🔁 Repeat jump: ${this.repeatState.endTime.toFixed(2)}s -> ${this.repeatState.startTime.toFixed(2)}s`);
+                }
+            }
+        };
+        
+        video.addEventListener('timeupdate', this.repeatListener);
+    },
+    
+    // リピートリスナー削除
+    removeRepeatListener() {
+        const video = this.elements.videoPlayer;
+        if (video && this.repeatListener) {
+            video.removeEventListener('timeupdate', this.repeatListener);
+            this.repeatListener = null;
+        }
+    },
+    
+    // 時間フォーマット（mm:ss形式）
+    formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    },
+    
+    // リピート状態表示
+    showRepeatStatus(message) {
+        // 既存の状態表示要素があるか確認
+        let statusElement = document.getElementById('repeat-status');
+        
+        if (!statusElement) {
+            // 状態表示要素を作成
+            statusElement = document.createElement('div');
+            statusElement.id = 'repeat-status';
+            statusElement.style.cssText = `
+                position: absolute;
+                top: 20px;
+                left: 20px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 10px 15px;
+                border-radius: 5px;
+                font-size: 14px;
+                z-index: 1001;
+                max-width: 300px;
+                word-wrap: break-word;
+            `;
+            this.elements.videoModal.appendChild(statusElement);
+        }
+        
+        statusElement.textContent = message;
+        statusElement.style.display = 'block';
+        
+        // 3秒後に非表示
+        setTimeout(() => {
+            if (statusElement) {
+                statusElement.style.display = 'none';
+            }
+        }, 3000);
     }
 };
 
