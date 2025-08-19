@@ -1,16 +1,19 @@
 import fs from 'fs';
 import path from 'path';
-import { VideoMetadata } from '../types';
+import crypto from 'crypto';
+import { VideoMetadata, RegisteredFolder } from '../types';
 import ThumbnailGenerator from './thumbnailGenerator';
 
 export default class VideoService {
   private videoDir: string;
   private readonly thumbnailGenerator: ThumbnailGenerator;
   private videos: Map<string, VideoMetadata> = new Map();
+  private readonly registeredFoldersFile: string;
 
   constructor(videoDir?: string) {
     this.videoDir = videoDir || path.join(__dirname, '../storage/videos');
     this.thumbnailGenerator = new ThumbnailGenerator(path.join(__dirname, '../storage/thumbnails'));
+    this.registeredFoldersFile = path.join(__dirname, '../storage/registeredFolders.json');
     console.log(`Video directory set to: ${this.videoDir}`);
     console.log(`Current __dirname: ${__dirname}`);
     this.initializeVideoDir();
@@ -196,5 +199,116 @@ export default class VideoService {
     
     this.videos.clear();
     await this.loadVideos();
+  }
+
+  // ===== 登録フォルダ管理機能 =====
+  
+  private readRegisteredFolders(): RegisteredFolder[] {
+    try {
+      if (!fs.existsSync(this.registeredFoldersFile)) {
+        return [];
+      }
+      const content = fs.readFileSync(this.registeredFoldersFile, 'utf8');
+      return JSON.parse(content) as RegisteredFolder[];
+    } catch (error) {
+      console.error('Failed to read registered folders:', error);
+      return [];
+    }
+  }
+
+  private writeRegisteredFolders(folders: RegisteredFolder[]): void {
+    try {
+      const dir = path.dirname(this.registeredFoldersFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.registeredFoldersFile, JSON.stringify(folders, null, 2), 'utf8');
+    } catch (error) {
+      console.error('Failed to write registered folders:', error);
+    }
+  }
+
+  private generateFolderId(folderPath: string): string {
+    return crypto.createHash('md5').update(path.resolve(folderPath)).digest('hex');
+  }
+
+  async getRegisteredFolders(): Promise<RegisteredFolder[]> {
+    return this.readRegisteredFolders();
+  }
+
+  async addRegisteredFolder(folderPath: string, name?: string): Promise<RegisteredFolder> {
+    if (!folderPath) {
+      throw new Error('Folder path is required');
+    }
+
+    const resolvedPath = path.resolve(folderPath);
+    
+    // フォルダの存在確認
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`Folder does not exist: ${resolvedPath}`);
+    }
+
+    const stats = fs.statSync(resolvedPath);
+    if (!stats.isDirectory()) {
+      throw new Error(`Path is not a directory: ${resolvedPath}`);
+    }
+
+    const folders = this.readRegisteredFolders();
+    const id = this.generateFolderId(resolvedPath);
+    const displayName = name || path.basename(resolvedPath);
+
+    // 既存チェック（同じパスがあれば更新）
+    const existingIndex = folders.findIndex(f => f.id === id);
+    const newFolder: RegisteredFolder = {
+      id,
+      path: resolvedPath,
+      name: displayName,
+      createdAt: new Date()
+    };
+
+    if (existingIndex >= 0) {
+      folders[existingIndex] = { ...folders[existingIndex], name: displayName };
+    } else {
+      folders.push(newFolder);
+    }
+
+    this.writeRegisteredFolders(folders);
+    return newFolder;
+  }
+
+  async removeRegisteredFolder(id: string): Promise<void> {
+    if (!id) {
+      throw new Error('Folder ID is required');
+    }
+
+    const folders = this.readRegisteredFolders();
+    const filteredFolders = folders.filter(f => f.id !== id);
+    
+    if (folders.length === filteredFolders.length) {
+      throw new Error('Folder not found');
+    }
+
+    this.writeRegisteredFolders(filteredFolders);
+  }
+
+  async setRegisteredFolder(id: string): Promise<RegisteredFolder> {
+    if (!id) {
+      throw new Error('Folder ID is required');
+    }
+
+    const folders = this.readRegisteredFolders();
+    const folder = folders.find(f => f.id === id);
+    
+    if (!folder) {
+      throw new Error('Registered folder not found');
+    }
+
+    // フォルダの存在確認
+    if (!fs.existsSync(folder.path)) {
+      throw new Error(`Registered folder no longer exists: ${folder.path}`);
+    }
+
+    await this.changeVideoDirectory(folder.path);
+    return folder;
   }
 }

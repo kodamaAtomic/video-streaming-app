@@ -28,6 +28,22 @@
                 
                 <div id="folder-status"></div>
             </div>
+            
+            <!-- 登録フォルダ管理 -->
+            <div class="registered-folders-section">
+                <h3>📚 登録済みフォルダ</h3>
+                <div class="folder-selector">
+                    <select id="registered-folders-select" class="folder-select">
+                        <option value="">フォルダを選択してください</option>
+                    </select>
+                    <button id="apply-registered-btn" class="btn btn-primary">適用</button>
+                </div>
+                <div class="folder-actions">
+                    <button id="register-current-btn" class="btn btn-secondary">📁 現在のフォルダを登録</button>
+                    <button id="remove-registered-btn" class="btn btn-danger">🗑️ 選択したフォルダを削除</button>
+                </div>
+                <div id="registered-status" class="status-message"></div>
+            </div>
             <div class="view-controls">
                 <label>表示数:</label>
                 <button class="view-btn active" data-count="24">24</button>

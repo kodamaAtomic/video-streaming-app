@@ -32,6 +32,9 @@ const VideoApp = {
         
         // 初期データ読み込み
         this.fetchThumbnails();
+        
+        // 登録フォルダUI初期化
+        this.initRegisteredFoldersUI();
     },
     
     // DOM要素の存在確認
@@ -623,6 +626,247 @@ const VideoApp = {
             case 'macos':
             default:
                 return 'tok'; // macOSのデフォルト（実際の環境に合わせて調整）
+        }
+    },
+
+    // ===== 登録フォルダ管理機能 =====
+    
+    // 登録フォルダUI初期化
+    initRegisteredFoldersUI() {
+        const applyBtn = document.getElementById('apply-registered-btn');
+        const registerBtn = document.getElementById('register-current-btn');
+        const removeBtn = document.getElementById('remove-registered-btn');
+        
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => this.applyRegisteredFolder());
+        }
+        if (registerBtn) {
+            registerBtn.addEventListener('click', () => this.registerCurrentFolder());
+        }
+        if (removeBtn) {
+            removeBtn.addEventListener('click', () => this.removeRegisteredFolder());
+        }
+        
+        // 登録フォルダ一覧を読み込み
+        this.fetchRegisteredFolders();
+    },
+
+    // 登録フォルダ一覧取得
+    async fetchRegisteredFolders() {
+        try {
+            console.log('🔍 Fetching registered folders...');
+            const response = await fetch('/api/videos/folders');
+            console.log('📡 Response status:', response.status);
+            
+            const result = await response.json();
+            console.log('📋 API Response:', result);
+            
+            if (result.success && Array.isArray(result.data)) {
+                console.log(`✅ Found ${result.data.length} registered folders`);
+                this.renderRegisteredFolders(result.data);
+            } else {
+                console.error('❌ Failed to fetch registered folders:', result.message);
+                const registeredStatus = document.getElementById('registered-status');
+                if (registeredStatus) {
+                    registeredStatus.innerHTML = `<span style="color: orange;">⚠️ 登録フォルダの取得に失敗: ${result.message || 'Unknown error'}</span>`;
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error fetching registered folders:', error);
+            const registeredStatus = document.getElementById('registered-status');
+            if (registeredStatus) {
+                registeredStatus.innerHTML = `<span style="color: red;">❌ 通信エラー: ${error.message}</span>`;
+            }
+        }
+    },
+
+    // 登録フォルダ一覧表示
+    renderRegisteredFolders(folders) {
+        console.log('🎨 Rendering registered folders:', folders);
+        const select = document.getElementById('registered-folders-select');
+        if (!select) {
+            console.error('❌ registered-folders-select element not found!');
+            return;
+        }
+        
+        // 既存オプションをクリア
+        select.innerHTML = '<option value="">フォルダを選択してください</option>';
+        
+        // 登録フォルダをオプションとして追加
+        if (folders.length === 0) {
+            console.log('📂 No registered folders found');
+            const option = document.createElement('option');
+            option.value = "";
+            option.textContent = "登録されたフォルダがありません";
+            option.disabled = true;
+            select.appendChild(option);
+        } else {
+            folders.forEach(folder => {
+                console.log(`📁 Adding folder option: ${folder.name} (${folder.path})`);
+                const option = document.createElement('option');
+                option.value = folder.id;
+                option.textContent = `${folder.name} (${folder.path})`;
+                select.appendChild(option);
+            });
+        }
+    },
+
+    // 現在のフォルダを登録
+    async registerCurrentFolder() {
+        console.log('📝 Starting folder registration...');
+        const selectedFolderPath = document.getElementById('selected-folder-path');
+        const registeredStatus = document.getElementById('registered-status');
+        
+        console.log('🔍 Checking selected folder element:', selectedFolderPath);
+        console.log('🔍 Current dataset:', selectedFolderPath?.dataset);
+        
+        if (!selectedFolderPath || !selectedFolderPath.dataset.realFolderPath) {
+            console.log('❌ No folder selected');
+            alert('まずフォルダを選択してください');
+            return;
+        }
+        
+        const folderPath = selectedFolderPath.dataset.realFolderPath;
+        console.log('📁 Folder path to register:', folderPath);
+        
+        const folderName = prompt('表示名を入力してください（空の場合はフォルダ名を使用）:');
+        
+        // キャンセルされた場合は処理を中止
+        if (folderName === null) {
+            console.log('📝 Registration cancelled by user');
+            return;
+        }
+        
+        const payload = {
+            path: folderPath,
+            name: folderName || undefined
+        };
+        
+        console.log('🚀 Sending registration request:', payload);
+        
+        try {
+            registeredStatus.innerHTML = '<span style="color: blue;">📁 フォルダを登録中...</span>';
+            
+            const response = await fetch('/api/videos/folders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            console.log('📡 Registration response status:', response.status);
+            const result = await response.json();
+            console.log('📋 Registration response:', result);
+            
+            if (result.success) {
+                registeredStatus.innerHTML = '<span style="color: green;">✅ フォルダが登録されました</span>';
+                console.log('✅ Registration successful');
+                
+                // 登録フォルダ一覧を更新
+                await this.fetchRegisteredFolders();
+                
+                setTimeout(() => {
+                    registeredStatus.innerHTML = '';
+                }, 3000);
+            } else {
+                console.error('❌ Registration failed:', result.message);
+                registeredStatus.innerHTML = `<span style="color: red;">❌ 登録失敗: ${result.message}</span>`;
+            }
+        } catch (error) {
+            console.error('❌ Error registering folder:', error);
+            registeredStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+        }
+    },
+
+    // 登録フォルダを適用
+    async applyRegisteredFolder() {
+        const select = document.getElementById('registered-folders-select');
+        const registeredStatus = document.getElementById('registered-status');
+        
+        if (!select || !select.value) {
+            alert('登録フォルダを選択してください');
+            return;
+        }
+        
+        const folderId = select.value;
+        
+        try {
+            registeredStatus.innerHTML = '<span style="color: blue;">🔄 フォルダを切り替え中...</span>';
+            
+            const response = await fetch('/api/videos/change-folder', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    mode: 'registered',
+                    folderId: folderId
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                registeredStatus.innerHTML = '<span style="color: green;">✅ フォルダが切り替えられました</span>';
+                
+                // サムネイル一覧を更新
+                await this.fetchThumbnails();
+                
+                setTimeout(() => {
+                    registeredStatus.innerHTML = '';
+                }, 3000);
+            } else {
+                registeredStatus.innerHTML = `<span style="color: red;">❌ 切り替え失敗: ${result.message}</span>`;
+            }
+        } catch (error) {
+            console.error('Error applying registered folder:', error);
+            registeredStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
+        }
+    },
+
+    // 登録フォルダを削除
+    async removeRegisteredFolder() {
+        const select = document.getElementById('registered-folders-select');
+        const registeredStatus = document.getElementById('registered-status');
+        
+        if (!select || !select.value) {
+            alert('削除する登録フォルダを選択してください');
+            return;
+        }
+        
+        const folderId = select.value;
+        const selectedOption = select.options[select.selectedIndex];
+        const folderName = selectedOption.textContent;
+        
+        if (!confirm(`「${folderName}」を登録から削除しますか？`)) {
+            return;
+        }
+        
+        try {
+            registeredStatus.innerHTML = '<span style="color: blue;">🗑️ フォルダ登録を削除中...</span>';
+            
+            const response = await fetch(`/api/videos/folders/${folderId}`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                registeredStatus.innerHTML = '<span style="color: green;">✅ フォルダ登録が削除されました</span>';
+                
+                // 登録フォルダ一覧を更新
+                await this.fetchRegisteredFolders();
+                
+                setTimeout(() => {
+                    registeredStatus.innerHTML = '';
+                }, 3000);
+            } else {
+                registeredStatus.innerHTML = `<span style="color: red;">❌ 削除失敗: ${result.message}</span>`;
+            }
+        } catch (error) {
+            console.error('Error removing registered folder:', error);
+            registeredStatus.innerHTML = `<span style="color: red;">❌ エラー: ${error.message}</span>`;
         }
     }
 };

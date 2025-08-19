@@ -35,3 +35,11 @@ export interface ApiResponse<T = any> {
   message?: string;
   error?: string;
 }
+
+// 登録フォルダ情報
+export interface RegisteredFolder {
+  id: string;      // 一意ID（パスのハッシュ等）
+  path: string;    // 絶対パス
+  name: string;    // 表示名（省略時はフォルダ名）
+  createdAt: Date; // 登録日時
+}

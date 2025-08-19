@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import VideoService from '../services/videoService';
+import { RegisteredFolder } from '../types';
 import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
@@ -230,7 +231,26 @@ export default class VideoController {
 
   async changeVideoFolder(req: Request, res: Response): Promise<void> {
     try {
-      const { folderPath, videoFiles, mode } = req.body;
+      const { folderPath, videoFiles, mode, folderId, name } = req.body;
+      
+      // 登録フォルダモード
+      if (mode === 'registered') {
+        if (!folderId) {
+          res.status(400).json({
+            success: false,
+            message: 'folderId is required for registered mode'
+          });
+          return;
+        }
+
+        const folder = await this.videoService.setRegisteredFolder(folderId);
+        res.json({
+          success: true,
+          message: 'Video folder changed to registered folder successfully',
+          data: { folder, mode: 'registered' }
+        });
+        return;
+      }
       
       // ローカルフォルダ設定モード
       if (mode === 'local-folder') {
@@ -345,6 +365,85 @@ export default class VideoController {
         error: error instanceof Error ? error.message : 'Unknown error'
       };
       res.status(500).json(response);
+    }
+  }
+
+  // ===== 登録フォルダ管理 =====
+  
+  async getRegisteredFolders(req: Request, res: Response): Promise<void> {
+    try {
+      const folders = await this.videoService.getRegisteredFolders();
+      res.json({
+        success: true,
+        data: folders
+      });
+    } catch (error) {
+      console.error('Error getting registered folders:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get registered folders',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  async addRegisteredFolder(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('📝 Adding registered folder request:', req.body);
+      const { path: folderPath, name } = req.body;
+      
+      if (!folderPath) {
+        console.error('❌ No folder path provided');
+        res.status(400).json({
+          success: false,
+          message: 'Folder path is required'
+        });
+        return;
+      }
+
+      console.log(`📁 Attempting to register folder: ${folderPath} with name: ${name || 'auto'}`);
+      const folder = await this.videoService.addRegisteredFolder(folderPath, name);
+      console.log('✅ Folder registered successfully:', folder);
+      
+      res.json({
+        success: true,
+        message: 'Folder registered successfully',
+        data: folder
+      });
+    } catch (error) {
+      console.error('❌ Error adding registered folder:', error);
+      res.status(400).json({
+        success: false,
+        message: 'Failed to register folder',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  async removeRegisteredFolder(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'Folder ID is required'
+        });
+        return;
+      }
+
+      await this.videoService.removeRegisteredFolder(id);
+      res.json({
+        success: true,
+        message: 'Folder removed successfully'
+      });
+    } catch (error) {
+      console.error('Error removing registered folder:', error);
+      res.status(400).json({
+        success: false,
+        message: 'Failed to remove folder',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 }

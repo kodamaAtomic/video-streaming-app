@@ -59,15 +59,23 @@ const upload = multer({
   }
 });
 
-// ルート定義
+// ルート定義（順序重要：より具体的なルートを先に定義）
 router.get('/', videoController.getAllVideos.bind(videoController));
-router.get('/:id', videoController.getVideoById.bind(videoController));
-router.get('/:id/stream', videoController.streamVideo.bind(videoController));
 // 既存のルートに加えて、サムネイル一覧エンドポイントを追加
 router.get('/thumbnails/all', videoController.getAllThumbnails.bind(videoController));
+
+// 登録フォルダ管理エンドポイント（:id より先に定義）
+router.get('/folders', videoController.getRegisteredFolders.bind(videoController));
+router.post('/folders', videoController.addRegisteredFolder.bind(videoController));
+router.delete('/folders/:id', videoController.removeRegisteredFolder.bind(videoController));
+
+// フォルダ変更エンドポイント
+router.post('/change-folder', videoController.changeVideoFolder.bind(videoController));
+
+// 個別ビデオルート（最後に配置）
+router.get('/:id', videoController.getVideoById.bind(videoController));
+router.get('/:id/stream', videoController.streamVideo.bind(videoController));
 router.post('/upload', upload.single('video'), videoController.uploadVideo.bind(videoController));
 router.delete('/:id', videoController.deleteVideo.bind(videoController));
-// フォルダ変更エンドポイントを追加
-router.post('/change-folder', videoController.changeVideoFolder.bind(videoController));
 
 export { router as videoRoutes };
