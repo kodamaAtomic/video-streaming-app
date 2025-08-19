@@ -8,7 +8,10 @@
     "dev": "npm run build && node dist/server/app.js",
     "start": "node dist/server/app.js",
     "clean": "rm -rf dist && rm -rf client",
-    "watch": "npm run build && nodemon dist/server/app.js"
+    "watch": "npm run build && nodemon dist/server/app.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "compression": "^1.7.4",
