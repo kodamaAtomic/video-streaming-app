@@ -244,14 +244,45 @@ npm start
 
 # クリーンアップ
 npm run clean
+
+# テスト実行
+npm test
+
+# テスト監視モード
+npm run test:watch
+
+# カバレッジレポート付きテスト
+npm run test:coverage
 ```
 
 ### 開発フロー
 
 1. **ソースコード編集**: `src/` 以下のファイルを編集
 2. **ビルド**: `npm run build` でコンパイル・コピー
-3. **テスト**: `npm run dev` で開発サーバー起動
-4. **デバッグ**: ブラウザの開発者ツールでログ確認
+3. **テスト**: `npm test` でテスト実行
+4. **開発サーバー**: `npm run dev` で開発サーバー起動
+5. **デバッグ**: ブラウザの開発者ツールでログ確認
+
+### テスト
+
+プロジェクトにはJestを使用した包括的なテストスイートが含まれています。
+
+```bash
+# 全てのテストを実行
+npm test
+
+# テストを監視モードで実行（ファイル変更時に自動実行）
+npm run test:watch
+
+# カバレッジレポート付きでテストを実行
+npm run test:coverage
+```
+
+#### テスト対象
+- **VideoService**: 動画管理の主要ロジック
+- **VideoController**: API エンドポイントのテスト
+- **ThumbnailGenerator**: サムネイル生成機能
+- **型定義**: TypeScript の型安全性の確認
 
 ## システムサービスとして登録
 
