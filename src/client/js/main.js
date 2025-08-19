@@ -29,6 +29,13 @@ const VideoApp = {
     // キーボードヘルプ用の状態
     helpKeydownHandler: null,
     
+    // サムネイル生成状態
+    thumbnailGeneration: {
+        isRunning: false,
+        currentJob: null,
+        stats: { successful: 0, failed: 0, total: 0 }
+    },
+    
     // 初期化
     init() {
         console.log('🚀 VideoApp initializing...');
@@ -1380,6 +1387,226 @@ const VideoApp = {
         
         // オーバーフローを元に戻す
         document.body.style.overflow = this.isPlayerMode ? 'hidden' : 'auto';
+    },
+
+    // 並列サムネイル生成の実行
+    async generateThumbnailsBatch() {
+        if (this.thumbnailGeneration.isRunning) {
+            alert('サムネイル生成は既に実行中です');
+            return;
+        }
+
+        try {
+            this.thumbnailGeneration.isRunning = true;
+            this.showThumbnailGenerationStatus('開始中...', { successful: 0, failed: 0, total: 0 });
+
+            const response = await fetch('/api/videos/thumbnails/batch-generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    skipExisting: true,
+                    maxConcurrency: undefined // サーバー側で自動決定
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.thumbnailGeneration.stats = result.data;
+                this.showThumbnailGenerationStatus('完了', result.data);
+                
+                // サムネイルを再読み込み
+                setTimeout(() => {
+                    this.fetchThumbnails();
+                    this.hideThumbnailGenerationStatus();
+                }, 2000);
+            } else {
+                throw new Error(result.message || 'サムネイル生成に失敗しました');
+            }
+        } catch (error) {
+            console.error('Batch thumbnail generation error:', error);
+            this.showThumbnailGenerationStatus(`エラー: ${error.message}`, null);
+            
+            setTimeout(() => {
+                this.hideThumbnailGenerationStatus();
+            }, 5000);
+        } finally {
+            this.thumbnailGeneration.isRunning = false;
+        }
+    },
+
+    // 超高速サムネイル生成の実行
+    async generateThumbnailsUltraFast() {
+        if (this.thumbnailGeneration.isRunning) {
+            alert('サムネイル生成は既に実行中です');
+            return;
+        }
+
+        try {
+            this.thumbnailGeneration.isRunning = true;
+            this.showThumbnailGenerationStatus('⚡ 超高速モード開始中...', { successful: 0, failed: 0, total: 0 });
+
+            const response = await fetch('/api/videos/thumbnails/ultra-fast', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.thumbnailGeneration.stats = result.data;
+                this.showThumbnailGenerationStatus('⚡ 超高速生成完了', result.data);
+                
+                // サムネイルを再読み込み
+                setTimeout(() => {
+                    this.fetchThumbnails();
+                    this.hideThumbnailGenerationStatus();
+                }, 2000);
+            } else {
+                throw new Error(result.message || '超高速サムネイル生成に失敗しました');
+            }
+        } catch (error) {
+            console.error('Ultra-fast thumbnail generation error:', error);
+            this.showThumbnailGenerationStatus(`❌ エラー: ${error.message}`, null);
+            
+            setTimeout(() => {
+                this.hideThumbnailGenerationStatus();
+            }, 5000);
+        } finally {
+            this.thumbnailGeneration.isRunning = false;
+        }
+    },
+
+    // プログレッシブサムネイル生成の実行
+    async generateThumbnailsProgressive() {
+        if (this.thumbnailGeneration.isRunning) {
+            alert('サムネイル生成は既に実行中です');
+            return;
+        }
+
+        try {
+            this.thumbnailGeneration.isRunning = true;
+            this.showThumbnailGenerationStatus('🎯 プログレッシブモード開始中...', { successful: 0, failed: 0, total: 0 });
+
+            const response = await fetch('/api/videos/thumbnails/progressive', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.thumbnailGeneration.stats = result.data;
+                this.showThumbnailGenerationStatus('🎯 プログレッシブ生成完了', result.data);
+                
+                // サムネイルを再読み込み
+                setTimeout(() => {
+                    this.fetchThumbnails();
+                    this.hideThumbnailGenerationStatus();
+                }, 2000);
+            } else {
+                throw new Error(result.message || 'プログレッシブサムネイル生成に失敗しました');
+            }
+        } catch (error) {
+            console.error('Progressive thumbnail generation error:', error);
+            this.showThumbnailGenerationStatus(`❌ エラー: ${error.message}`, null);
+            
+            setTimeout(() => {
+                this.hideThumbnailGenerationStatus();
+            }, 5000);
+        } finally {
+            this.thumbnailGeneration.isRunning = false;
+        }
+    },
+
+    // サムネイル生成ステータスの表示
+    showThumbnailGenerationStatus(status, stats) {
+        let statusEl = document.getElementById('thumbnail-generation-status');
+        
+        if (!statusEl) {
+            statusEl = document.createElement('div');
+            statusEl.id = 'thumbnail-generation-status';
+            statusEl.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 15px 20px;
+                border-radius: 8px;
+                z-index: 10000;
+                font-family: monospace;
+                font-size: 14px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                min-width: 300px;
+            `;
+            document.body.appendChild(statusEl);
+        }
+
+        let content = `🎬 サムネイル生成: ${status}`;
+        
+        if (stats) {
+            content += `\n`;
+            content += `✅ 成功: ${stats.successful}\n`;
+            content += `❌ 失敗: ${stats.failed}\n`;
+            content += `📊 合計: ${stats.total}`;
+            
+            if (stats.stats) {
+                content += `\n\n⚙️ 設定:`;
+                content += `\n  最大並列数: ${stats.stats.maxConcurrency}`;
+                content += `\n  実行中: ${stats.stats.activeJobs}`;
+            }
+        }
+
+        statusEl.innerHTML = content.replace(/\n/g, '<br>');
+    },
+
+    // サムネイル生成ステータスの非表示
+    hideThumbnailGenerationStatus() {
+        const statusEl = document.getElementById('thumbnail-generation-status');
+        if (statusEl) {
+            statusEl.remove();
+        }
+    },
+
+    // サムネイル生成統計情報の取得
+    async getThumbnailStats() {
+        try {
+            const response = await fetch('/api/videos/thumbnails/stats');
+            const result = await response.json();
+
+            if (result.success) {
+                console.log('Thumbnail generation stats:', result.data);
+                
+                // 統計情報を美しく表示
+                const stats = result.data;
+                let statsMessage = `📊 サムネイル生成統計\n\n`;
+                statsMessage += `⚙️ 最大並列数: ${stats.maxConcurrency}\n`;
+                statsMessage += `🔄 実行中ジョブ: ${stats.activeJobs}\n`;
+                statsMessage += `📁 保存先: ${stats.thumbnailDir}\n\n`;
+                
+                if (stats.gpuCapabilities) {
+                    statsMessage += `🎮 GPU機能:\n`;
+                    statsMessage += `  NVENC (NVIDIA): ${stats.gpuCapabilities.nvenc ? '✅' : '❌'}\n`;
+                    statsMessage += `  VAAPI (Intel/AMD): ${stats.gpuCapabilities.vaapi ? '✅' : '❌'}\n`;
+                    statsMessage += `  QSV (Intel): ${stats.gpuCapabilities.qsv ? '✅' : '❌'}\n`;
+                    statsMessage += `  GPU利用可能: ${stats.gpuCapabilities.available ? '✅' : '❌'}\n`;
+                }
+                
+                alert(statsMessage);
+                return result.data;
+            }
+        } catch (error) {
+            console.error('Error getting thumbnail stats:', error);
+            alert('統計情報の取得に失敗しました');
+        }
+        return null;
     }
 };
 
@@ -1391,6 +1618,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // グローバル関数として公開
 window.uploadVideo = () => VideoApp.uploadVideo();
 window.debugFetchThumbnails = () => VideoApp.fetchThumbnails();
+window.generateThumbnailsBatch = () => VideoApp.generateThumbnailsBatch();
+window.generateThumbnailsUltraFast = () => VideoApp.generateThumbnailsUltraFast();
+window.generateThumbnailsProgressive = () => VideoApp.generateThumbnailsProgressive();
+window.getThumbnailStats = () => VideoApp.getThumbnailStats();
 window.closeVideoPlayer = () => VideoApp.closeVideoPlayer();
 window.changeVideoFolder = () => VideoApp.changeVideoFolder();
 window.selectVideoFolder = () => VideoApp.selectVideoFolder();

@@ -38,6 +38,13 @@ export default class VideoService {
 
       console.log(`Found ${videoFiles.length} video files in ${this.videoDir}`);
       
+      if (videoFiles.length === 0) {
+        return;
+      }
+
+      // ビデオメタデータの生成（並列処理なし）
+      const videoMetadatas: VideoMetadata[] = [];
+      
       for (const file of videoFiles) {
         try {
           const videoPath = path.join(this.videoDir, file);
@@ -57,13 +64,45 @@ export default class VideoService {
             thumbnailPath: undefined
           };
 
-          await this.ensureThumbnail(metadata);
-          
+          videoMetadatas.push(metadata);
           this.videos.set(videoId, metadata);
-          console.log(`Loaded video: ${file}`);
+          console.log(`Loaded video metadata: ${file}`);
         } catch (error) {
           console.error(`Error loading video ${file}:`, error);
         }
+      }
+
+      // サムネイル生成を並列実行
+      if (videoMetadatas.length > 0) {
+        console.log(`🚀 Starting parallel thumbnail generation for ${videoMetadatas.length} videos`);
+        
+        const thumbnailJobs = videoMetadatas.map(video => ({
+          videoPath: video.path,
+          videoId: video.id
+        }));
+
+        const result = await this.thumbnailGenerator.generateThumbnailsConcurrent(thumbnailJobs, {
+          skipExisting: true,
+          optimizeSettings: true
+        });
+
+        // サムネイルパスを更新
+        result.successful.forEach(thumbnailPath => {
+          const filename = path.basename(thumbnailPath);
+          const videoId = filename.replace('_thumbnail.png', '');
+          const video = this.videos.get(videoId);
+          if (video) {
+            video.thumbnailPath = thumbnailPath;
+            console.log(`✅ Thumbnail linked: ${video.originalName}`);
+          }
+        });
+
+        // エラー情報をログ出力
+        result.failed.forEach(({ videoId, error }) => {
+          console.error(`❌ Thumbnail generation failed for ${videoId}: ${error}`);
+        });
+
+        console.log(`🏁 Thumbnail generation completed: ${result.successful.length} successful, ${result.failed.length} failed`);
       }
     } catch (error) {
       console.error('Error loading videos:', error);
@@ -92,12 +131,13 @@ export default class VideoService {
 
   async ensureThumbnail(video: VideoMetadata): Promise<void> {
     try {
-      const thumbnailPath = await this.thumbnailGenerator.generateThumbnail(
+      // キャッシュ機能付きのサムネイル生成を使用
+      const thumbnailPath = await this.thumbnailGenerator.generateThumbnailWithCache(
         video.path, 
         video.id
       );
       video.thumbnailPath = thumbnailPath;
-      console.log(`Generated thumbnail for ${video.originalName}: ${thumbnailPath}`);
+      console.log(`Ensured thumbnail for ${video.originalName}: ${thumbnailPath}`);
     } catch (error) {
       console.error(`Failed to generate thumbnail for ${video.originalName}:`, error);
       video.thumbnailPath = undefined;
@@ -199,6 +239,93 @@ export default class VideoService {
     
     this.videos.clear();
     await this.loadVideos();
+  }
+
+  // フォルダ全体のサムネイル生成（高速化版）
+  async generateThumbnailsForCurrentFolder(options?: {
+    skipExisting?: boolean;
+    maxConcurrency?: number;
+  }): Promise<{ successful: number; failed: number }> {
+    const result = await this.thumbnailGenerator.generateThumbnailsForFolder(this.videoDir, {
+      skipExisting: options?.skipExisting ?? true,
+      maxConcurrency: options?.maxConcurrency ?? undefined,
+      optimizeSettings: true
+    });
+
+    // サムネイルパスを更新
+    result.successful.forEach(thumbnailPath => {
+      const filename = path.basename(thumbnailPath);
+      const videoId = filename.replace('_thumbnail.png', '');
+      const video = this.videos.get(videoId);
+      if (video) {
+        video.thumbnailPath = thumbnailPath;
+      }
+    });
+
+    return { 
+      successful: result.successful.length, 
+      failed: result.failed.length 
+    };
+  }
+
+  // サムネイル生成の統計情報取得
+  getThumbnailStats(): {
+    maxConcurrency: number;
+    activeJobs: number;
+    thumbnailDir: string;
+    gpuCapabilities: any;
+  } {
+    return this.thumbnailGenerator.getStats();
+  }
+
+  // 超高速サムネイル生成
+  async generateThumbnailsUltraFast(): Promise<{ successful: number; failed: number }> {
+    const videos = Array.from(this.videos.values()).map(video => ({
+      videoPath: video.path,
+      videoId: video.id
+    }));
+
+    const result = await this.thumbnailGenerator.generateThumbnailsUltraFast(videos);
+
+    // サムネイルパスを更新
+    result.successful.forEach(thumbnailPath => {
+      const filename = path.basename(thumbnailPath);
+      const videoId = filename.replace('_thumbnail.png', '');
+      const video = this.videos.get(videoId);
+      if (video) {
+        video.thumbnailPath = thumbnailPath;
+      }
+    });
+
+    return { 
+      successful: result.successful.length, 
+      failed: result.failed.length 
+    };
+  }
+
+  // プログレッシブサムネイル生成
+  async generateThumbnailsProgressive(): Promise<{ successful: number; failed: number }> {
+    const videos = Array.from(this.videos.values()).map(video => ({
+      videoPath: video.path,
+      videoId: video.id
+    }));
+
+    const result = await this.thumbnailGenerator.generateProgressiveThumbnails(videos);
+
+    // サムネイルパスを更新
+    result.successful.forEach(thumbnailPath => {
+      const filename = path.basename(thumbnailPath);
+      const videoId = filename.replace('_thumbnail.png', '');
+      const video = this.videos.get(videoId);
+      if (video) {
+        video.thumbnailPath = thumbnailPath;
+      }
+    });
+
+    return { 
+      successful: result.successful.length, 
+      failed: result.failed.length 
+    };
   }
 
   // ===== 登録フォルダ管理機能 =====

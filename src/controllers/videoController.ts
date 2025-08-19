@@ -446,4 +446,112 @@ export default class VideoController {
       });
     }
   }
+
+  // 並列サムネイル生成API
+  async generateThumbnailsBatch(req: Request, res: Response): Promise<void> {
+    try {
+      const { skipExisting = true, maxConcurrency } = req.body;
+      
+      console.log(`📊 Starting batch thumbnail generation`);
+      console.log(`Skip existing: ${skipExisting}`);
+      console.log(`Max concurrency: ${maxConcurrency || 'auto'}`);
+
+      const result = await this.videoService.generateThumbnailsForCurrentFolder({
+        skipExisting,
+        maxConcurrency
+      });
+
+      res.json({
+        success: true,
+        message: `Thumbnail generation completed`,
+        data: {
+          successful: result.successful,
+          failed: result.failed,
+          total: result.successful + result.failed,
+          stats: this.videoService.getThumbnailStats()
+        }
+      });
+    } catch (error) {
+      console.error('Error in batch thumbnail generation:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate thumbnails',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // サムネイル生成統計情報API
+  async getThumbnailStats(req: Request, res: Response): Promise<void> {
+    try {
+      const stats = this.videoService.getThumbnailStats();
+      res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      console.error('Error getting thumbnail stats:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get thumbnail stats',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // 超高速サムネイル生成API
+  async generateThumbnailsUltraFast(req: Request, res: Response): Promise<void> {
+    try {
+      console.log(`⚡ Starting ultra-fast thumbnail generation`);
+
+      const result = await this.videoService.generateThumbnailsUltraFast();
+
+      res.json({
+        success: true,
+        message: `Ultra-fast thumbnail generation completed`,
+        data: {
+          successful: result.successful,
+          failed: result.failed,
+          total: result.successful + result.failed,
+          mode: 'ultra-fast',
+          stats: this.videoService.getThumbnailStats()
+        }
+      });
+    } catch (error) {
+      console.error('Error in ultra-fast thumbnail generation:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate thumbnails in ultra-fast mode',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // プログレッシブサムネイル生成API
+  async generateThumbnailsProgressive(req: Request, res: Response): Promise<void> {
+    try {
+      console.log(`🎯 Starting progressive thumbnail generation`);
+
+      const result = await this.videoService.generateThumbnailsProgressive();
+
+      res.json({
+        success: true,
+        message: `Progressive thumbnail generation completed`,
+        data: {
+          successful: result.successful,
+          failed: result.failed,
+          total: result.successful + result.failed,
+          mode: 'progressive',
+          stats: this.videoService.getThumbnailStats()
+        }
+      });
+    } catch (error) {
+      console.error('Error in progressive thumbnail generation:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate thumbnails in progressive mode',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }

@@ -72,6 +72,16 @@ router.delete('/folders/:id', videoController.removeRegisteredFolder.bind(videoC
 // フォルダ変更エンドポイント
 router.post('/change-folder', videoController.changeVideoFolder.bind(videoController));
 
+// サムネイル生成エンドポイント
+router.post('/thumbnails/batch-generate', videoController.generateThumbnailsBatch.bind(videoController));
+router.post('/thumbnails/ultra-fast', videoController.generateThumbnailsUltraFast.bind(videoController));
+router.post('/thumbnails/progressive', videoController.generateThumbnailsProgressive.bind(videoController));
+router.get('/thumbnails/stats', videoController.getThumbnailStats.bind(videoController));
+
+// 並列サムネイル生成エンドポイント
+router.post('/thumbnails/batch-generate', videoController.generateThumbnailsBatch.bind(videoController));
+router.get('/thumbnails/stats', videoController.getThumbnailStats.bind(videoController));
+
 // 個別ビデオルート（最後に配置）
 router.get('/:id', videoController.getVideoById.bind(videoController));
 router.get('/:id/stream', videoController.streamVideo.bind(videoController));
