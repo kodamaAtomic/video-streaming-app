@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import os from 'os';
 import { VideoMetadata, RegisteredFolder } from '../types';
 import ThumbnailGenerator from './thumbnailGenerator';
 
@@ -615,7 +616,16 @@ export default class VideoService {
     console.log(`📹 Transcoding ${inputPath} -> ${outputPath}`);
 
     try {
-      // WSL環境対応のFFmpeg設定（CPU専用、固定品質）
+      // プラットフォームとGPU機能に基づいて最適なエンコーダーを選択
+      const optimalEncoder = this.thumbnailGenerator.getOptimalEncoderOptions();
+      const platformInfo = this.thumbnailGenerator.getPlatformInfo();
+      const gpuCapabilities = this.thumbnailGenerator.getGPUCapabilities();
+
+      console.log(`🖥️ Platform: ${platformInfo.platform} (${platformInfo.arch}) - ${platformInfo.cpus} CPUs`);
+      console.log(`🎮 GPU Status: VAAPI=${gpuCapabilities.vaapi ? '✅' : '❌'}, NVENC=${gpuCapabilities.nvenc ? '✅' : '❌'}, QSV=${gpuCapabilities.qsv ? '✅' : '❌'}`);
+      console.log(`⚡ Selected encoder: ${optimalEncoder.description}`);
+
+      // WSL環境対応のFFmpeg設定
       const ffmpeg = require('fluent-ffmpeg');
       const ffmpegPath = require('ffmpeg-static');
       
@@ -623,17 +633,25 @@ export default class VideoService {
         ffmpeg.setFfmpegPath(ffmpegPath);
       }
 
+      // エンコーダーオプション構築
+      let outputOptions = [
+        ...optimalEncoder.video,  // 最適なビデオエンコーダー
+        '-c:a', 'aac',           // AAC audio codec
+        '-b:a', '128k',          // 音声ビットレート
+        '-movflags', '+faststart', // Web最適化
+        '-y'                     // 上書き許可
+      ];
+
+      // CPU エンコーダーの場合は品質設定を追加
+      if (optimalEncoder.description.includes('CPU')) {
+        outputOptions.push('-crf', '23');  // 固定品質
+      }
+
+      console.log(`🛠️ FFmpeg options: ${outputOptions.join(' ')}`);
+
       await new Promise<void>((resolve, reject) => {
         const ffmpegProcess = ffmpeg(inputPath)
-          .outputOptions([
-            '-c:v', 'libx264',      // H.264 video codec
-            '-preset', 'fast',      // エンコード速度優先
-            '-crf', '23',           // 固定品質
-            '-c:a', 'aac',          // AAC audio codec
-            '-b:a', '128k',         // 音声ビットレート
-            '-movflags', '+faststart', // Web最適化
-            '-y'                    // 上書き許可
-          ])
+          .outputOptions(outputOptions)
           .on('start', (commandLine: string) => {
             console.log(`🚀 FFmpeg command: ${commandLine}`);
             // プロセスを管理マップに追加
@@ -687,5 +705,18 @@ export default class VideoService {
 
       throw error;
     }
+  }
+
+  // GPU機能とプラットフォーム情報の取得
+  getSystemInfo(): { 
+    gpu: any; 
+    platform: { platform: string; arch: string; cpus: number }; 
+    encoder: { video: string[]; description: string } 
+  } {
+    return {
+      gpu: this.thumbnailGenerator.getGPUCapabilities(),
+      platform: this.thumbnailGenerator.getPlatformInfo(),
+      encoder: this.thumbnailGenerator.getOptimalEncoderOptions()
+    };
   }
 }

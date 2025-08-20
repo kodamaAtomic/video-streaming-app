@@ -647,4 +647,30 @@ export default class VideoController {
       });
     }
   }
+
+  // システム情報（GPU・プラットフォーム・エンコーダー）の取得
+  async getSystemInfo(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('📊 Getting system information...');
+      
+      const systemInfo = this.videoService.getSystemInfo();
+      
+      res.json({
+        success: true,
+        data: {
+          platform: systemInfo.platform,
+          gpu: systemInfo.gpu,
+          encoder: systemInfo.encoder,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error('Error getting system information:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get system information',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }

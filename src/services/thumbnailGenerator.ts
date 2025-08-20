@@ -5,7 +5,11 @@ import fs from 'fs/promises';
 import fsSynce from 'fs';
 import os from 'os';
 import crypto from 'crypto';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { ThumbnailOptions } from '../types';
+
+const execAsync = promisify(exec);
 
 // FFmpegパスの設定と確認
 console.log('=== FFmpeg Setup ===');
@@ -176,6 +180,56 @@ export class ThumbnailGenerator {
     this.progressCallback = callback;
   }
 
+  // WSL環境の検出
+  private async detectWSLEnvironment(): Promise<boolean> {
+    try {
+      // 複数の方法でWSLを検出
+      
+      // 1. /proc/version でWSLの文字列を確認
+      try {
+        const procVersion = await fs.readFile('/proc/version', 'utf8');
+        if (procVersion.includes('WSL') || procVersion.includes('Microsoft')) {
+          console.log('🐧 WSL detected via /proc/version');
+          return true;
+        }
+      } catch {
+        // /proc/version が読めない場合は次の方法を試す
+      }
+
+      // 2. uname -a でWSLを確認
+      try {
+        const { stdout } = await execAsync('uname -a');
+        if (stdout.includes('WSL') || stdout.includes('Microsoft')) {
+          console.log('🐧 WSL detected via uname');
+          return true;
+        }
+      } catch {
+        // uname コマンドが失敗した場合は次の方法を試す
+      }
+
+      // 3. 環境変数 WSL_DISTRO_NAME の存在確認
+      if (process.env.WSL_DISTRO_NAME) {
+        console.log('🐧 WSL detected via WSL_DISTRO_NAME environment variable');
+        return true;
+      }
+
+      // 4. Windows特有のディレクトリ構造の確認
+      try {
+        await fs.access('/mnt/c');
+        console.log('🐧 WSL detected via /mnt/c directory');
+        return true;
+      } catch {
+        // /mnt/c がない場合はWSLではない可能性が高い
+      }
+
+      console.log('🐧 Native Linux environment detected');
+      return false;
+    } catch (error) {
+      console.log('⚠️ WSL detection failed, assuming native Linux');
+      return false;
+    }
+  }
+
   private notifyProgress(completed: number, errors: number, total: number): void {
     if (this.progressCallback) {
       this.progressCallback({
@@ -191,6 +245,25 @@ export class ThumbnailGenerator {
   private async detectGPUCapabilities(): Promise<void> {
     try {
       console.log('🔍 Detecting GPU capabilities...');
+      
+      // WSL環境の検出
+      const isWSL = await this.detectWSLEnvironment();
+      if (isWSL) {
+        console.log('⚠️ WSL environment detected - GPU acceleration disabled for compatibility');
+        this.gpuCapabilities = {
+          nvenc: false,
+          vaapi: false,
+          qsv: false,
+          available: false
+        };
+        console.log('GPU Capabilities: {');
+        console.log('  NVENC (NVIDIA): ❌ (WSL limitation)');
+        console.log('  VAAPI (Intel/AMD): ❌ (WSL limitation)');
+        console.log('  QSV (Intel): ❌ (WSL limitation)');
+        console.log('  GPU Available: ❌ (WSL environment)');
+        console.log('}');
+        return;
+      }
       
       // より簡単なテスト用の入力を使用
       const simpleTestOptions = ['-f', 'lavfi'];
@@ -237,18 +310,340 @@ export class ThumbnailGenerator {
 
   // より簡単なGPU機能テスト
   private async testSimpleGPUFeature(gpuType: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      try {
-        // 短時間で結果を返すシンプルなテスト
-        setTimeout(() => {
-          // 実際のGPU検出は環境依存なので、一旦falseを返す
-          // 本格的なGPU検出は別途実装が必要
-          resolve(false);
-        }, 100);
-      } catch (error) {
-        resolve(false);
+    try {
+      const platform = os.platform();
+      console.log(`🔍 Testing ${gpuType} on ${platform}`);
+
+      switch (gpuType) {
+        case 'vaapi':
+          return await this.testVAAPISupport();
+        case 'nvenc':
+          return await this.testNVENCSupport();
+        case 'qsv':
+          return await this.testQSVSupport();
+        default:
+          return false;
       }
-    });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log(`❌ ${gpuType} test failed:`, errorMessage);
+      return false;
+    }
+  }
+
+  // VAAPI サポート検出 (Linux専用)
+  private async testVAAPISupport(): Promise<boolean> {
+    const platform = os.platform();
+    if (platform !== 'linux') {
+      console.log('⚠️ VAAPI is only supported on Linux');
+      return false;
+    }
+
+    try {
+      console.log('🔍 Testing VAAPI with actual encoding test...');
+      
+      // 実際のエンコーディングテストを実行（より厳密）
+      const testResult = await this.testActualVAAPIEncoding();
+      if (testResult) {
+        console.log('✅ VAAPI encoding test passed');
+        return true;
+      }
+      
+      console.log('❌ VAAPI encoding test failed');
+      return false;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log('❌ VAAPI test failed:', errorMessage);
+      return false;
+    }
+  }
+
+  // 実際のVAAPIエンコーディングテスト
+  private async testActualVAAPIEncoding(): Promise<boolean> {
+    try {
+      // 1秒間のテスト映像をVAAPIでエンコード
+      const { stdout, stderr } = await execAsync(
+        'timeout 30s ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=1 ' +
+        '-vaapi_device /dev/dri/renderD128 -vf "format=nv12,hwupload" ' +
+        '-c:v h264_vaapi -t 1 -f null - 2>&1',
+        { timeout: 35000 }
+      );
+      
+      const output = stdout + stderr;
+      
+      // エラーパターンをチェック
+      const errorPatterns = [
+        'No such file or directory',
+        'Unknown encoder',
+        'Device creation failed',
+        'Cannot load',
+        'hwupload',
+        'vaapi_device',
+        'No VAAPI support',
+        'Failed to initialize',
+        'Permission denied'
+      ];
+      
+      for (const pattern of errorPatterns) {
+        if (output.includes(pattern)) {
+          console.log(`❌ VAAPI test failed: ${pattern} detected in output`);
+          return false;
+        }
+      }
+      
+      // 成功パターンをチェック
+      if (output.includes('video:') || output.includes('frame=')) {
+        return true;
+      }
+      
+      console.log('❌ VAAPI test: No success indicators found');
+      return false;
+    } catch (error) {
+      console.log('❌ VAAPI encoding test exception:', error);
+      return false;
+    }
+  }
+
+  // NVENC サポート検出
+  private async testNVENCSupport(): Promise<boolean> {
+    try {
+      console.log('🔍 Testing NVENC with actual encoding test...');
+      
+      // 実際のエンコーディングテストを実行
+      const testResult = await this.testActualNVENCEncoding();
+      if (testResult) {
+        console.log('✅ NVENC encoding test passed');
+        return true;
+      }
+      
+      console.log('❌ NVENC encoding test failed');
+      return false;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log('❌ NVENC test failed:', errorMessage);
+      return false;
+    }
+  }
+
+  // 実際のNVENCエンコーディングテスト
+  private async testActualNVENCEncoding(): Promise<boolean> {
+    try {
+      const { stdout, stderr } = await execAsync(
+        'timeout 30s ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=1 ' +
+        '-c:v h264_nvenc -preset fast -t 1 -f null - 2>&1',
+        { timeout: 35000 }
+      );
+      
+      const output = stdout + stderr;
+      
+      // エラーパターンをチェック
+      const errorPatterns = [
+        'Unknown encoder',
+        'No NVENC capable devices found',
+        'Cannot load',
+        'Driver does not support',
+        'Failed to open',
+        'No such device'
+      ];
+      
+      for (const pattern of errorPatterns) {
+        if (output.includes(pattern)) {
+          console.log(`❌ NVENC test failed: ${pattern} detected`);
+          return false;
+        }
+      }
+      
+      // 成功パターンをチェック
+      if (output.includes('video:') || output.includes('frame=')) {
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // FFmpeg NVENC エンコーダーテスト
+  private async testFFmpegNVENCEncoder(): Promise<boolean> {
+    try {
+      const { stderr } = await execAsync('ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=1 -c:v h264_nvenc -t 1 -f null - 2>&1 || true');
+      return !stderr.includes('Unknown encoder') && !stderr.includes('No NVENC capable devices found');
+    } catch {
+      return false;
+    }
+  }
+
+  // Intel QSV サポート検出
+  private async testQSVSupport(): Promise<boolean> {
+    try {
+      console.log('🔍 Testing QSV with actual encoding test...');
+      
+      // 実際のエンコーディングテストを実行
+      const testResult = await this.testActualQSVEncoding();
+      if (testResult) {
+        console.log('✅ QSV encoding test passed');
+        return true;
+      }
+      
+      console.log('❌ QSV encoding test failed');
+      return false;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log('❌ QSV test failed:', errorMessage);
+      return false;
+    }
+  }
+
+  // 実際のQSVエンコーディングテスト
+  private async testActualQSVEncoding(): Promise<boolean> {
+    try {
+      const { stdout, stderr } = await execAsync(
+        'timeout 30s ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=1 ' +
+        '-c:v h264_qsv -preset fast -t 1 -f null - 2>&1',
+        { timeout: 35000 }
+      );
+      
+      const output = stdout + stderr;
+      
+      // エラーパターンをチェック
+      const errorPatterns = [
+        'Unknown encoder',
+        'No Intel Graphics hardware',
+        'Cannot load',
+        'MFX session',
+        'Failed to initialize',
+        'No such device'
+      ];
+      
+      for (const pattern of errorPatterns) {
+        if (output.includes(pattern)) {
+          console.log(`❌ QSV test failed: ${pattern} detected`);
+          return false;
+        }
+      }
+      
+      // 成功パターンをチェック
+      if (output.includes('video:') || output.includes('frame=')) {
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // FFmpeg QSV エンコーダーテスト
+  private async testFFmpegQSVEncoder(): Promise<boolean> {
+    try {
+      const { stderr } = await execAsync('ffmpeg -f lavfi -i testsrc=duration=1:size=320x240:rate=1 -c:v h264_qsv -t 1 -f null - 2>&1 || true');
+      return !stderr.includes('Unknown encoder') && !stderr.includes('No Intel Graphics hardware');
+    } catch {
+      return false;
+    }
+  }
+
+  // GPU機能の公開メソッド
+  getGPUCapabilities(): GPUCapabilities {
+    return { ...this.gpuCapabilities };
+  }
+
+  // プラットフォーム別の最適なエンコーダーオプションを取得
+  getOptimalEncoderOptions(): { video: string[]; description: string } {
+    const platform = os.platform();
+    
+    console.log(`🔧 Selecting optimal encoder for ${platform}`);
+    console.log(`🎮 Available GPU: VAAPI=${this.gpuCapabilities.vaapi}, NVENC=${this.gpuCapabilities.nvenc}, QSV=${this.gpuCapabilities.qsv}`);
+    
+    // WSL環境の場合は強制的にCPU
+    if (this.isWSLEnvironment()) {
+      return {
+        video: ['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'],
+        description: 'CPU Software Encoding (WSL compatibility)'
+      };
+    }
+    
+    // プラットフォーム別最適化
+    if (platform === 'linux') {
+      if (this.gpuCapabilities.vaapi) {
+        return {
+          video: ['-vaapi_device', '/dev/dri/renderD128', '-vf', 'format=nv12,hwupload', '-c:v', 'h264_vaapi'],
+          description: 'Linux VAAPI Hardware Acceleration'
+        };
+      } else if (this.gpuCapabilities.nvenc) {
+        return {
+          video: ['-c:v', 'h264_nvenc', '-preset', 'fast'],
+          description: 'NVIDIA NVENC Hardware Acceleration'
+        };
+      } else if (this.gpuCapabilities.qsv) {
+        return {
+          video: ['-c:v', 'h264_qsv', '-preset', 'fast'],
+          description: 'Intel QSV Hardware Acceleration'
+        };
+      }
+    } else if (platform === 'darwin') {
+      // macOS: VideoToolbox を優先
+      return {
+        video: ['-c:v', 'h264_videotoolbox'],
+        description: 'macOS VideoToolbox Hardware Acceleration'
+      };
+    } else if (platform === 'win32') {
+      if (this.gpuCapabilities.nvenc) {
+        return {
+          video: ['-c:v', 'h264_nvenc', '-preset', 'fast'],
+          description: 'Windows NVIDIA NVENC Hardware Acceleration'
+        };
+      } else if (this.gpuCapabilities.qsv) {
+        return {
+          video: ['-c:v', 'h264_qsv', '-preset', 'fast'],
+          description: 'Windows Intel QSV Hardware Acceleration'
+        };
+      }
+    }
+    
+    // フォールバック: CPU エンコーダー
+    console.log('⚠️ No GPU acceleration available, using CPU encoding');
+    return {
+      video: ['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'],
+      description: 'CPU Software Encoding (fallback)'
+    };
+  }
+
+  // WSL環境かどうかを確認（キャッシュ機能付き）
+  private _isWSL: boolean | null = null;
+  private isWSLEnvironment(): boolean {
+    if (this._isWSL !== null) {
+      return this._isWSL;
+    }
+    
+    // 簡易WSL検出（同期版）
+    try {
+      if (process.env.WSL_DISTRO_NAME) {
+        this._isWSL = true;
+        return true;
+      }
+      
+      if (fsSynce.existsSync('/mnt/c')) {
+        this._isWSL = true;
+        return true;
+      }
+      
+      this._isWSL = false;
+      return false;
+    } catch {
+      this._isWSL = false;
+      return false;
+    }
+  }
+
+  // プラットフォーム情報の取得
+  getPlatformInfo(): { platform: string; arch: string; cpus: number } {
+    return {
+      platform: os.platform(),
+      arch: os.arch(),
+      cpus: os.cpus().length
+    };
   }
 
   // 動画メタデータを取得してアスペクト比を計算

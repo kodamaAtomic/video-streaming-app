@@ -87,6 +87,9 @@ router.post('/transcode', videoController.startTranscode.bind(videoController));
 router.get('/transcode/progress/:jobId', videoController.getTranscodeProgress.bind(videoController));
 router.delete('/transcode/cancel/:jobId', videoController.cancelTranscode.bind(videoController));
 
+// システム情報取得
+router.get('/system-info', videoController.getSystemInfo.bind(videoController));
+
 // 個別ビデオルート（最後に配置）
 router.get('/:id', videoController.getVideoById.bind(videoController));
 router.get('/:id/stream', videoController.streamVideo.bind(videoController));
