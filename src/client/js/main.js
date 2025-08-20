@@ -29,6 +29,13 @@ const VideoApp = {
     // キーボードヘルプ用の状態
     helpKeydownHandler: null,
     
+    // 新機能: 再生回数、ソート、フィルタの状態
+    playCountData: {}, // {videoId: playCount}
+    currentSort: 'name',
+    currentSortOrder: 'asc',
+    currentFilter: '',
+    filteredVideos: [],
+    
     // サムネイル生成状態
     thumbnailGeneration: {
         isRunning: false,
@@ -109,6 +116,54 @@ const VideoApp = {
         
         // キーボードショートカット
         this.setupKeyboardShortcuts();
+        
+        // 新機能のイベントリスナー
+        this.setupSortFilterListeners();
+    },
+    
+    // ソート・フィルタ機能のイベントリスナー設定
+    setupSortFilterListeners() {
+        // ソート選択
+        const sortSelect = document.getElementById('sort-select');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', (e) => {
+                this.currentSort = e.target.value;
+                this.applySortAndFilter();
+            });
+        }
+        
+        // ソート順序切り替え
+        const sortOrderBtn = document.getElementById('sort-order-btn');
+        if (sortOrderBtn) {
+            sortOrderBtn.addEventListener('click', () => {
+                this.currentSortOrder = this.currentSortOrder === 'asc' ? 'desc' : 'asc';
+                sortOrderBtn.textContent = this.currentSortOrder === 'asc' ? '昇順 ↑' : '降順 ↓';
+                sortOrderBtn.setAttribute('data-order', this.currentSortOrder);
+                this.applySortAndFilter();
+            });
+        }
+        
+        // フィルタ入力
+        const filterInput = document.getElementById('filter-input');
+        if (filterInput) {
+            filterInput.addEventListener('input', (e) => {
+                this.currentFilter = e.target.value;
+                this.applySortAndFilter();
+            });
+        }
+        
+        // フィルタクリア
+        const clearFilterBtn = document.getElementById('clear-filter-btn');
+        if (clearFilterBtn) {
+            clearFilterBtn.addEventListener('click', () => {
+                const filterInput = document.getElementById('filter-input');
+                if (filterInput) {
+                    filterInput.value = '';
+                    this.currentFilter = '';
+                    this.applySortAndFilter();
+                }
+            });
+        }
     },
     
     // キーボードショートカットの設定
@@ -289,8 +344,9 @@ const VideoApp = {
         // 選択状態をリセット
         this.selectedThumbnailIndex = -1;
         
-        // 表示するビデオ数を制限
-        this.displayThumbnails(this.currentVideos.slice(0, count));
+        // フィルタされた動画を考慮して表示更新
+        const videosToShow = this.filteredVideos.length > 0 ? this.filteredVideos : this.currentVideos;
+        this.displayThumbnails(videosToShow.slice(0, count));
     },
     
     // サムネイル取得
@@ -311,8 +367,11 @@ const VideoApp = {
                 const videosWithThumbnails = result.data.filter(video => video.thumbnailUrl);
                 this.currentVideos = videosWithThumbnails;
                 
-                // 現在のグリッドサイズに応じて表示
-                this.displayThumbnails(videosWithThumbnails.slice(0, this.currentGridSize));
+                // 新機能: フィルタされた動画リストをリセット
+                this.filteredVideos = [];
+                
+                // ソートとフィルタを適用
+                this.applySortAndFilter();
             } else {
                 this.elements.thumbnailGrid.innerHTML = '<p>ビデオの取得に失敗しました。</p>';
             }
@@ -368,6 +427,12 @@ const VideoApp = {
         img.alt = video.title || video.originalName;
         img.style.display = 'block';
         
+        // 再生回数オーバーレイ
+        const playCountOverlay = document.createElement('div');
+        playCountOverlay.className = 'play-count-overlay';
+        const playCount = this.getPlayCount(video.id);
+        playCountOverlay.textContent = playCount.toString();
+        
         // タイトル要素
         const title = document.createElement('p');
         title.textContent = video.title || video.originalName;
@@ -395,6 +460,7 @@ const VideoApp = {
         
         // 要素組み立て
         imageContainer.appendChild(img);
+        imageContainer.appendChild(playCountOverlay);
         thumbnailElement.appendChild(imageContainer);
         thumbnailElement.appendChild(title);
         thumbnailElement.appendChild(deleteButton);
@@ -404,6 +470,10 @@ const VideoApp = {
             // クリックされたサムネイルを選択状態にする
             this.selectedThumbnailIndex = index;
             this.updateThumbnailSelection();
+            
+            // 再生回数を増加
+            this.incrementPlayCount(video.id);
+            
             this.openVideoPlayer(video);
         });
         
@@ -432,6 +502,99 @@ const VideoApp = {
             this.elements.videoModal.style.display = 'block';
             document.body.style.overflow = 'hidden'; // スクロール無効化
         }
+    },
+    
+    // 再生回数を取得
+    getPlayCount(videoId) {
+        return this.playCountData[videoId] || 0;
+    },
+    
+    // 再生回数を増加
+    incrementPlayCount(videoId) {
+        this.playCountData[videoId] = this.getPlayCount(videoId) + 1;
+        console.log(`📊 Play count for ${videoId}: ${this.playCountData[videoId]}`);
+        
+        // UIを更新（再生回数オーバーレイの更新）
+        this.updatePlayCountDisplay(videoId);
+    },
+    
+    // 再生回数表示を更新
+    updatePlayCountDisplay(videoId) {
+        const thumbnails = this.elements.thumbnailGrid.querySelectorAll('.thumbnail');
+        thumbnails.forEach((thumbnail, index) => {
+            const displayedVideos = this.getCurrentDisplayedVideos();
+            if (index < displayedVideos.length && displayedVideos[index].id === videoId) {
+                const overlay = thumbnail.querySelector('.play-count-overlay');
+                if (overlay) {
+                    overlay.textContent = this.getPlayCount(videoId).toString();
+                }
+            }
+        });
+    },
+    
+    // ソートとフィルタを適用
+    applySortAndFilter() {
+        console.log(`🔍 Applying sort: ${this.currentSort} (${this.currentSortOrder}), filter: "${this.currentFilter}"`);
+        
+        let videos = [...this.currentVideos];
+        
+        // フィルタ適用
+        if (this.currentFilter.trim()) {
+            try {
+                const regex = new RegExp(this.currentFilter, 'i');
+                videos = videos.filter(video => {
+                    const filename = video.title || video.originalName || '';
+                    return regex.test(filename);
+                });
+            } catch (e) {
+                // 正規表現が無効な場合は通常の文字列検索
+                const filterLower = this.currentFilter.toLowerCase();
+                videos = videos.filter(video => {
+                    const filename = (video.title || video.originalName || '').toLowerCase();
+                    return filename.includes(filterLower);
+                });
+            }
+        }
+        
+        // ソート適用
+        videos.sort((a, b) => {
+            let aValue, bValue;
+            
+            switch (this.currentSort) {
+                case 'name':
+                    aValue = (a.title || a.originalName || '').toLowerCase();
+                    bValue = (b.title || b.originalName || '').toLowerCase();
+                    break;
+                case 'playCount':
+                    aValue = this.getPlayCount(a.id);
+                    bValue = this.getPlayCount(b.id);
+                    break;
+                case 'timestamp':
+                    aValue = a.lastModified || a.created || 0;
+                    bValue = b.lastModified || b.created || 0;
+                    break;
+                default:
+                    return 0;
+            }
+            
+            if (aValue < bValue) return this.currentSortOrder === 'asc' ? -1 : 1;
+            if (aValue > bValue) return this.currentSortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        // フィルタされたビデオを保存
+        this.filteredVideos = videos;
+        
+        // 表示を更新
+        this.displayThumbnails(videos);
+        
+        console.log(`📊 Filtered ${videos.length} videos from ${this.currentVideos.length} total`);
+    },
+    
+    // 現在表示中の動画一覧を取得（フィルタ済み）
+    getCurrentDisplayedVideos() {
+        const videosToShow = this.filteredVideos.length > 0 ? this.filteredVideos : this.currentVideos;
+        return videosToShow.slice(0, this.currentGridSize);
     },
     
     // ビデオプレイヤーを閉じる

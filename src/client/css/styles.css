@@ -1119,3 +1119,122 @@ input:focus {
         flex-direction: column;
     }
 }
+
+/* ソート・フィルタ機能のスタイル */
+.sort-filter-controls {
+    background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    display: flex;
+    gap: 30px;
+    align-items: center;
+    flex-wrap: wrap;
+    box-shadow: 0 4px 20px var(--shadow-light);
+    border: 1px solid var(--border-color);
+}
+
+.sort-control, .filter-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sort-control label, .filter-control label {
+    color: var(--text-secondary);
+    font-weight: 600;
+    min-width: 60px;
+}
+
+.sort-select, .filter-input {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    outline: none;
+}
+
+.sort-select:focus, .filter-input:focus {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.sort-select {
+    min-width: 140px;
+}
+
+.filter-input {
+    min-width: 200px;
+}
+
+.btn-small {
+    padding: 6px 12px;
+    font-size: 12px;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-small:hover {
+    background: var(--accent-primary);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+}
+
+/* 再生回数オーバーレイ */
+.play-count-overlay {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: rgba(0, 0, 0, 0.8);
+    color: #ffffff;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    backdrop-filter: blur(4px);
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.play-count-overlay::before {
+    content: "▶";
+    color: #00d4ff;
+    font-size: 10px;
+}
+
+.thumbnail {
+    position: relative;
+}
+
+@media (max-width: 768px) {
+    .sort-filter-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+    
+    .sort-control, .filter-control {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    
+    .sort-control label, .filter-control label {
+        min-width: auto;
+    }
+    
+    .filter-input {
+        min-width: auto;
+    }
+}
