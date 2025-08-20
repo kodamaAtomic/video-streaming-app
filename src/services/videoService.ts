@@ -27,21 +27,27 @@ export default class VideoService {
     }
   }
 
+  private generateVideoId(filename: string): string {
+    return path.parse(filename).name;
+  }
+
   private async loadVideos(): Promise<void> {
     try {
       const files = fs.readdirSync(this.videoDir);
+      
+      // 通常のビデオファイルとTSファイルを分別
       const videoFiles = files.filter(file => 
         ['.mp4', '.avi', '.mov', '.mkv', '.webm'].some(ext => 
           file.toLowerCase().endsWith(ext)
         )
       );
-
-      console.log(`Found ${videoFiles.length} video files in ${this.videoDir}`);
       
-      if (videoFiles.length === 0) {
-        return;
-      }
+      const tsFiles = files.filter(file => 
+        file.toLowerCase().endsWith('.ts')
+      );
 
+      console.log(`Found ${videoFiles.length} video files and ${tsFiles.length} TS files in ${this.videoDir}`);
+      
       // ビデオメタデータの生成（並列処理なし）
       const videoMetadatas: VideoMetadata[] = [];
       
@@ -72,11 +78,55 @@ export default class VideoService {
         }
       }
 
-      // サムネイル生成を並列実行
+      // TSファイルのメタデータ生成
+      for (const tsFile of tsFiles) {
+        try {
+          // 同名のMP4ファイルが存在するかチェック
+          const baseName = path.basename(tsFile, '.ts');
+          const mp4Exists = videoFiles.some(videoFile => 
+            path.basename(videoFile, path.extname(videoFile)) === baseName
+          );
+
+          if (!mp4Exists) {
+            const tsPath = path.join(this.videoDir, tsFile);
+            const stats = fs.statSync(tsPath);
+            const videoId = this.generateVideoId(tsFile);
+
+            const metadata: VideoMetadata = {
+              id: videoId,
+              filename: tsFile,
+              originalName: tsFile,
+              path: tsPath,
+              size: stats.size,
+              mimetype: 'video/mp2t',
+              thumbnailPath: '', // TSロゴサムネイルは後で設定
+              uploadDate: stats.mtime,
+              createdAt: stats.mtime,
+              updatedAt: stats.mtime,
+              timestamp: stats.mtime.toISOString(),
+              playCount: 0,
+              isFavorite: false,
+              isTranscoding: false,
+              isTs: true // TSファイルフラグ
+            };
+
+            this.videos.set(videoId, metadata);
+            console.log(`Loaded TS file metadata: ${tsFile}`);
+          } else {
+            console.log(`Skipping TS file ${tsFile} - MP4 version exists`);
+          }
+        } catch (error) {
+          console.error(`Error loading TS file ${tsFile}:`, error);
+        }
+      }
+
+      // サムネイル生成を並列実行（TSファイルは除外）
       if (videoMetadatas.length > 0) {
-        console.log(`🚀 Starting parallel thumbnail generation for ${videoMetadatas.length} videos`);
+        const nonTsVideos = videoMetadatas.filter(video => !video.path.toLowerCase().endsWith('.ts'));
+        console.log(`🚀 Starting parallel thumbnail generation for ${nonTsVideos.length} videos (${videoMetadatas.length - nonTsVideos.length} TS files skipped)`);
         
-        const thumbnailJobs = videoMetadatas.map(video => ({
+        // TSファイル以外のみをサムネイル生成対象とする
+        const thumbnailJobs = nonTsVideos.map(video => ({
           videoPath: video.path,
           videoId: video.id
         }));
@@ -437,5 +487,137 @@ export default class VideoService {
 
     await this.changeVideoDirectory(folder.path);
     return folder;
+  }
+
+  // TSファイルのトランスコード開始
+  async startTranscode(videoId: string): Promise<{ jobId: string }> {
+    const video = this.videos.get(videoId);
+    if (!video || !video.isTs) {
+      throw new Error('TS video not found');
+    }
+
+    if (video.isTranscoding) {
+      throw new Error('Video is already being transcoded');
+    }
+
+    console.log(`🔄 Starting transcode for: ${video.originalName}`);
+
+    // トランスコード状態を更新
+    video.isTranscoding = true;
+    video.transcodeProgress = 0;
+
+    const jobId = crypto.createHash('md5').update(`${videoId}-${Date.now()}`).digest('hex');
+
+    // 簡易版：バックグラウンドでトランスコードを開始
+    this.performTranscode(videoId, jobId).catch(error => {
+      console.error(`Transcode failed for ${videoId}:`, error);
+      // エラー時は状態をリセット
+      if (this.videos.has(videoId)) {
+        const failedVideo = this.videos.get(videoId)!;
+        failedVideo.isTranscoding = false;
+        failedVideo.transcodeProgress = 0;
+      }
+    });
+
+    return { jobId };
+  }
+
+  // トランスコード進捗状況の取得
+  async getTranscodeProgress(jobId: string): Promise<{ progress: number; status: string }> {
+    // 簡易版：全てのビデオから進行中のものを検索
+    for (const video of this.videos.values()) {
+      if (video.isTranscoding) {
+        return {
+          progress: video.transcodeProgress || 0,
+          status: 'transcoding'
+        };
+      }
+    }
+
+    return {
+      progress: 100,
+      status: 'completed'
+    };
+  }
+
+  // 実際のトランスコード処理（プライベートメソッド）
+  private async performTranscode(videoId: string, jobId: string): Promise<void> {
+    const video = this.videos.get(videoId);
+    if (!video || !video.isTs) {
+      throw new Error('Video not found');
+    }
+
+    const inputPath = video.path;
+    const outputPath = path.join(path.dirname(inputPath), path.basename(inputPath, '.ts') + '.mp4');
+
+    console.log(`📹 Transcoding ${inputPath} -> ${outputPath}`);
+
+    try {
+      // WSL環境対応のFFmpeg設定（CPU専用、固定品質）
+      const ffmpeg = require('fluent-ffmpeg');
+      const ffmpegPath = require('ffmpeg-static');
+      
+      if (ffmpegPath) {
+        ffmpeg.setFfmpegPath(ffmpegPath);
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputPath)
+          .outputOptions([
+            '-c:v', 'libx264',      // H.264 video codec
+            '-preset', 'fast',      // エンコード速度優先
+            '-crf', '23',           // 固定品質
+            '-c:a', 'aac',          // AAC audio codec
+            '-b:a', '128k',         // 音声ビットレート
+            '-movflags', '+faststart', // Web最適化
+            '-y'                    // 上書き許可
+          ])
+          .on('start', (commandLine: string) => {
+            console.log(`🚀 FFmpeg command: ${commandLine}`);
+          })
+          .on('progress', (progress: any) => {
+            const percent = Math.round(progress.percent || 0);
+            console.log(`📊 Transcode progress: ${percent}%`);
+            
+            // 進捗を更新
+            if (this.videos.has(videoId)) {
+              this.videos.get(videoId)!.transcodeProgress = percent;
+            }
+          })
+          .on('end', () => {
+            console.log('✅ Transcode completed successfully');
+            resolve();
+          })
+          .on('error', (error: any) => {
+            console.error('❌ Transcode error:', error);
+            reject(error);
+          })
+          .save(outputPath);
+      });
+
+      // トランスコード完了後の処理
+      const video = this.videos.get(videoId)!;
+      video.isTranscoding = false;
+      video.transcodeProgress = 100;
+
+      console.log(`✅ Transcode completed: ${outputPath}`);
+
+      // ビデオリストを再読み込み（新しいMP4ファイルを認識させる）
+      setTimeout(() => {
+        this.loadVideos();
+      }, 1000);
+
+    } catch (error) {
+      console.error(`❌ Transcode failed for ${videoId}:`, error);
+      
+      // エラー時の状態リセット
+      const video = this.videos.get(videoId);
+      if (video) {
+        video.isTranscoding = false;
+        video.transcodeProgress = 0;
+      }
+
+      throw error;
+    }
   }
 }

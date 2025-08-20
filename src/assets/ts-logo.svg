@@ -1,0 +1,29 @@
+<!-- TS File Logo SVG -->
+<svg width="160" height="120" viewBox="0 0 160 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="160" height="120" fill="#1a1a1a" stroke="#666" stroke-width="2" rx="8"/>
+  
+  <!-- Main TS Logo -->
+  <g transform="translate(80, 40)">
+    <!-- T -->
+    <rect x="-30" y="0" width="20" height="4" fill="#4CAF50"/>
+    <rect x="-22" y="0" width="4" height="24" fill="#4CAF50"/>
+    
+    <!-- S -->
+    <path d="M -5 8 Q -5 4 -1 4 Q 3 4 3 8 Q 3 12 -1 12 Q -5 12 -5 16 Q -5 20 -1 20 Q 3 20 3 16" 
+          fill="none" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  
+  <!-- File Extension Text -->
+  <text x="80" y="75" font-family="Arial, sans-serif" font-size="12" font-weight="bold" 
+        text-anchor="middle" fill="#4CAF50">.TS</text>
+  
+  <!-- Format Info -->
+  <text x="80" y="90" font-family="Arial, sans-serif" font-size="8" 
+        text-anchor="middle" fill="#888">TRANSPORT STREAM</text>
+  
+  <!-- Transcode Available Icon -->
+  <circle cx="140" cy="20" r="8" fill="#FF9800"/>
+  <text x="140" y="25" font-family="Arial, sans-serif" font-size="10" font-weight="bold"
+        text-anchor="middle" fill="white">↻</text>
+</svg>

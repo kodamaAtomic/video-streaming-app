@@ -28,8 +28,14 @@ export default class VideoController {
         console.log(`Video: ${video.originalName}`);
         console.log(`Thumbnail path: ${video.thumbnailPath}`);
         
-        const thumbnailUrl = video.thumbnailPath ? 
-          `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null;
+        // TSファイルの場合は専用ロゴを、通常のファイルはサムネイルを使用
+        let thumbnailUrl;
+        if (video.isTs) {
+          thumbnailUrl = '/assets/ts-logo.svg';
+        } else {
+          thumbnailUrl = video.thumbnailPath ? 
+            `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null;
+        }
         
         console.log(`Generated thumbnail URL: ${thumbnailUrl}`);
         
@@ -41,7 +47,11 @@ export default class VideoController {
           size: video.size,
           createdAt: video.createdAt,
           updatedAt: video.updatedAt,
-          thumbnailUrl
+          thumbnailUrl,
+          // TSファイル関連プロパティを追加
+          isTs: video.isTs,
+          isTranscoding: video.isTranscoding,
+          transcodeProgress: video.transcodeProgress
         };
       });
 
@@ -550,6 +560,59 @@ export default class VideoController {
       res.status(500).json({
         success: false,
         message: 'Failed to generate thumbnails in progressive mode',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // TSファイルのトランスコード開始
+  async startTranscode(req: Request, res: Response): Promise<void> {
+    try {
+      const { videoId } = req.body;
+      
+      if (!videoId) {
+        res.status(400).json({
+          success: false,
+          message: 'Video ID is required'
+        });
+        return;
+      }
+
+      console.log(`🔄 Starting transcode for video: ${videoId}`);
+      
+      const result = await this.videoService.startTranscode(videoId);
+      
+      res.json({
+        success: true,
+        message: 'Transcode started successfully',
+        data: result
+      });
+    } catch (error) {
+      console.error('Error starting transcode:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to start transcode',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // トランスコード進捗状況の取得
+  async getTranscodeProgress(req: Request, res: Response): Promise<void> {
+    try {
+      const { jobId } = req.params;
+      
+      const progress = await this.videoService.getTranscodeProgress(jobId);
+      
+      res.json({
+        success: true,
+        data: progress
+      });
+    } catch (error) {
+      console.error('Error getting transcode progress:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get transcode progress',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }

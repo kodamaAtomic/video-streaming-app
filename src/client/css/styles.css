@@ -1479,3 +1479,206 @@ input:focus {
         margin: 2px 0;
     }
 }
+
+/* TSファイル用のスタイル */
+.thumbnail.ts-file {
+    border: 2px solid #4CAF50;
+    position: relative;
+}
+
+.thumbnail.ts-file::before {
+    content: 'TS';
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    background: #4CAF50;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    z-index: 2;
+}
+
+.transcode-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 152, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    z-index: 3;
+}
+
+/* トランスコード確認ダイアログ */
+.transcode-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.transcode-dialog-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 30px var(--shadow-heavy);
+}
+
+.transcode-dialog h3 {
+    color: var(--text-primary);
+    margin: 0 0 15px 0;
+    font-size: 1.3rem;
+}
+
+.transcode-dialog p {
+    color: var(--text-secondary);
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+}
+
+.transcode-dialog-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.transcode-dialog button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.transcode-dialog .btn-primary {
+    background: #4CAF50;
+    color: white;
+}
+
+.transcode-dialog .btn-primary:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+}
+
+.transcode-dialog .btn-secondary {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.transcode-dialog .btn-secondary:hover {
+    background: var(--bg-primary);
+    transform: translateY(-1px);
+}
+
+/* トランスコードプログレスダイアログ */
+.transcode-progress-dialog {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+.transcode-progress-content {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 30px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 30px var(--shadow-heavy);
+}
+
+.transcode-progress-content h3 {
+    color: var(--text-primary);
+    margin: 0 0 20px 0;
+    font-size: 1.3rem;
+    text-align: center;
+}
+
+.progress-container {
+    margin: 20px 0;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 20px;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4CAF50, #45a049);
+    transition: width 0.3s ease;
+    border-radius: 10px;
+}
+
+.progress-text {
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+}
+
+.progress-status {
+    text-align: center;
+    color: var(--text-secondary);
+    margin: 15px 0;
+    font-size: 14px;
+}
+
+.progress-buttons {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.progress-buttons button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.progress-buttons button:hover:not(:disabled) {
+    background: var(--bg-primary);
+    transform: translateY(-1px);
+}
+
+.progress-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

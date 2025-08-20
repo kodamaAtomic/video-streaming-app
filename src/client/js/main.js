@@ -407,7 +407,8 @@ const VideoApp = {
             console.log('📋 API Response:', result);
             
             if (result.success && result.data) {
-                const videosWithThumbnails = result.data.filter(video => video.thumbnailUrl);
+                // TSファイルも含めて表示するため、thumbnailUrlがあるかTSファイルかを確認
+                const videosWithThumbnails = result.data.filter(video => video.thumbnailUrl || video.isTs);
                 this.currentVideos = videosWithThumbnails;
                 
                 // 現在のフォルダ情報を取得して再生回数データを設定
@@ -469,8 +470,17 @@ const VideoApp = {
         
         // 画像要素
         const img = document.createElement('img');
-        img.src = video.thumbnailUrl;
-        img.alt = video.title || video.originalName;
+        
+        // TSファイルの場合は専用ロゴを表示
+        if (video.isTs) {
+            img.src = '/assets/ts-logo.svg';
+            img.alt = 'TS Video File';
+            thumbnailElement.classList.add('ts-file');
+        } else {
+            img.src = video.thumbnailUrl;
+            img.alt = video.title || video.originalName;
+        }
+        
         img.style.display = 'block';
         
         // 再生回数オーバーレイ
@@ -526,10 +536,15 @@ const VideoApp = {
             this.selectedThumbnailIndex = index;
             this.updateThumbnailSelection();
             
-            // 再生回数を増加
-            this.incrementPlayCount(video.id);
-            
-            this.openVideoPlayer(video);
+            if (video.isTs && !video.isTranscoding) {
+                // TSファイルの場合はトランスコード確認ダイアログを表示
+                window.showTranscodeDialog(video);
+            } else if (!video.isTs) {
+                // 通常のビデオファイルの場合は再生
+                this.incrementPlayCount(video.id);
+                this.openVideoPlayer(video);
+            }
+            // トランスコード中の場合は何もしない
         });
         
         this.elements.thumbnailGrid.appendChild(thumbnailElement);
@@ -2253,7 +2268,7 @@ window.runThumbnailTests = () => {
     // テスト関数をここに実装
 };
 
-// アコーディオン機能の実装
+    // アコーディオン機能の実装
 let isAdvancedFeaturesExpanded = false;
 
 window.toggleAdvancedFeatures = () => {
@@ -2280,6 +2295,173 @@ window.toggleAdvancedFeatures = () => {
         content.classList.add('collapsed');
         arrow.textContent = '▼';
         header.classList.remove('expanded');
+    }
+};
+
+// TSトランスコード確認ダイアログを表示
+window.showTranscodeDialog = (video) => {
+    const dialog = document.createElement('div');
+    dialog.className = 'transcode-dialog';
+    
+    dialog.innerHTML = `
+        <div class="transcode-dialog-content">
+            <h3>🔄 TSファイルのトランスコード</h3>
+            <p><strong>ファイル名:</strong> ${video.originalName}</p>
+            <p>このTSファイルをMP4形式に変換しますか？<br>
+               変換には時間がかかる場合があります。</p>
+            <div class="transcode-dialog-buttons">
+                <button class="btn-secondary" onclick="closeTranscodeDialog()">キャンセル</button>
+                <button class="btn-primary" onclick="startTranscode('${video.id}')">変換開始</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    // ESCキーで閉じる
+    const handleEscape = (e) => {
+        if (e.key === 'Escape') {
+            closeTranscodeDialog();
+            document.removeEventListener('keydown', handleEscape);
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
+    
+    // 背景クリックで閉じる
+    dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) {
+            closeTranscodeDialog();
+        }
+    });
+};
+
+window.closeTranscodeDialog = () => {
+    const dialog = document.querySelector('.transcode-dialog');
+    if (dialog) {
+        dialog.remove();
+    }
+};
+
+// プログレス表示ダイアログを表示
+window.showTranscodeProgress = (jobId) => {
+    const dialog = document.createElement('div');
+    dialog.className = 'transcode-progress-dialog';
+    
+    dialog.innerHTML = `
+        <div class="transcode-progress-content">
+            <h3>🔄 トランスコード進行中</h3>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill-${jobId}" style="width: 0%"></div>
+                </div>
+                <div class="progress-text" id="progress-text-${jobId}">0%</div>
+            </div>
+            <div class="progress-status" id="progress-status-${jobId}">準備中...</div>
+            <div class="progress-buttons">
+                <button class="btn-secondary" id="progress-close-btn-${jobId}" onclick="closeProgressDialog('${jobId}')" disabled>閉じる</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(dialog);
+    
+    // プログレス監視開始
+    startProgressMonitoring(jobId);
+};
+
+// プログレス監視機能
+window.startProgressMonitoring = (jobId) => {
+    const checkProgress = async () => {
+        try {
+            const response = await fetch(`/api/videos/transcode/progress/${jobId}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                const { progress, status } = result.data;
+                
+                // プログレスバー更新
+                const progressFill = document.getElementById(`progress-fill-${jobId}`);
+                const progressText = document.getElementById(`progress-text-${jobId}`);
+                const progressStatus = document.getElementById(`progress-status-${jobId}`);
+                const closeBtn = document.getElementById(`progress-close-btn-${jobId}`);
+                
+                if (progressFill && progressText && progressStatus) {
+                    progressFill.style.width = `${progress}%`;
+                    progressText.textContent = `${Math.round(progress)}%`;
+                    
+                    // ステータス更新
+                    if (status === 'completed') {
+                        progressStatus.textContent = '✅ 完了しました！';
+                        closeBtn.disabled = false;
+                        closeBtn.textContent = '閉じる';
+                        
+                        // ビデオリストを再読み込み
+                        setTimeout(() => {
+                            VideoApp.fetchThumbnails();
+                        }, 1000);
+                        
+                        return; // 監視終了
+                    } else if (status === 'error') {
+                        progressStatus.textContent = '❌ エラーが発生しました';
+                        closeBtn.disabled = false;
+                        closeBtn.textContent = '閉じる';
+                        return; // 監視終了
+                    } else {
+                        progressStatus.textContent = '🔄 変換中...';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Progress check error:', error);
+            const progressStatus = document.getElementById(`progress-status-${jobId}`);
+            if (progressStatus) {
+                progressStatus.textContent = '❌ 進捗取得エラー';
+            }
+        }
+        
+        // 2秒後に再チェック
+        setTimeout(checkProgress, 2000);
+    };
+    
+    // 最初のチェック
+    checkProgress();
+};
+
+// プログレスダイアログを閉じる
+window.closeProgressDialog = (jobId) => {
+    const dialog = document.querySelector('.transcode-progress-dialog');
+    if (dialog) {
+        dialog.remove();
+    }
+};
+
+window.startTranscode = async (videoId) => {
+    try {
+        console.log(`🔄 Starting transcode for video: ${videoId}`);
+        
+        // ダイアログを閉じる
+        closeTranscodeDialog();
+        
+        // トランスコード開始API呼び出し
+        const response = await fetch('/api/videos/transcode', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ videoId })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            // プログレス表示ダイアログを表示
+            showTranscodeProgress(result.data.jobId);
+        } else {
+            throw new Error(result.message || 'トランスコードの開始に失敗しました');
+        }
+    } catch (error) {
+        console.error('Transcode start error:', error);
+        alert(`エラー: ${error.message}`);
     }
 };
 

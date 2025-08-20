@@ -14,6 +14,13 @@ export interface VideoMetadata {
   uploadDate: Date;
   createdAt: Date;
   updatedAt: Date;
+  // TSトランスコード関連フィールド
+  isTs?: boolean;           // TSファイルかどうか
+  isTranscoding?: boolean;  // トランスコード中かどうか
+  transcodeProgress?: number; // トランスコード進捗(0-100)
+  playCount?: number;       // 再生回数
+  isFavorite?: boolean;     // お気に入り
+  timestamp?: string;       // タイムスタンプ文字列
 }
 
 export interface ThumbnailOptions {
