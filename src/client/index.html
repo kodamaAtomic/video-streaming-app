@@ -10,14 +10,6 @@
     <div class="container">
         <h1>Video Streaming App</h1>
         
-        <!-- ビデオアップロード部分 -->
-        <div id="upload-section">
-            <h2>ビデオをアップロード</h2>
-            <input type="file" id="video-upload" accept="video/*">
-            <button onclick="uploadVideo()">アップロード</button>
-            <div id="upload-progress"></div>
-        </div>
-        
         <!-- コントロールセクション -->
         <div id="control-section">
             <div class="folder-controls">
@@ -74,16 +66,49 @@
                 <button class="tab-btn active" data-tab="all">全ての動画</button>
                 <button class="tab-btn" data-tab="favorites">お気に入り ⭐</button>
             </div>
-            <div class="debug-controls">
-                <button onclick="runThumbnailTests()">自己テスト実行</button>
-                <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>
-                <br><br>
-                <strong>🚀 高速サムネイル生成:</strong><br>
-                <button onclick="generateThumbnailsBatch()" class="btn-primary">🎬 標準並列生成</button>
-                <button onclick="generateThumbnailsUltraFast()" class="btn-fast">⚡ 超高速生成</button>
-                <button onclick="generateThumbnailsProgressive()" class="btn-info">🎯 プログレッシブ生成</button>
-                <br><br>
-                <button onclick="getThumbnailStats()" class="btn-secondary">📊 統計情報</button>
+        </div>
+        
+        <!-- 詳細機能アコーディオン -->
+        <div id="advanced-features-accordion" class="accordion-container">
+            <div class="accordion-header" onclick="toggleAdvancedFeatures()">
+                <h2>🔧 詳細機能</h2>
+                <span id="accordion-arrow" class="accordion-arrow">▼</span>
+            </div>
+            <div id="advanced-features-content" class="accordion-content collapsed">
+                <!-- ビデオアップロード部分 -->
+                <div id="upload-section" class="feature-section">
+                    <h3>📤 ビデオをアップロード</h3>
+                    <input type="file" id="video-upload" accept="video/*">
+                    <button onclick="uploadVideo()">アップロード</button>
+                    <div id="upload-progress"></div>
+                </div>
+                
+                <!-- デバッグ・テスト機能 -->
+                <div id="debug-section" class="feature-section">
+                    <h3>🔍 開発・テスト機能</h3>
+                    <div class="debug-controls">
+                        <button onclick="runThumbnailTests()">自己テスト実行</button>
+                        <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>
+                    </div>
+                </div>
+                
+                <!-- 高速サムネイル生成機能 -->
+                <div id="thumbnail-generation-section" class="feature-section">
+                    <h3>⚡ 高速サムネイル生成</h3>
+                    <div class="generation-controls">
+                        <button onclick="generateThumbnailsBatch()" class="btn-primary">🎬 標準並列生成</button>
+                        <button onclick="generateThumbnailsUltraFast()" class="btn-fast">⚡ 超高速生成</button>
+                        <button onclick="generateThumbnailsProgressive()" class="btn-info">🎯 プログレッシブ生成</button>
+                    </div>
+                </div>
+                
+                <!-- 統計・分析機能 -->
+                <div id="stats-section" class="feature-section">
+                    <h3>📊 統計・分析</h3>
+                    <div class="stats-controls">
+                        <button onclick="getThumbnailStats()" class="btn-secondary">📊 統計情報</button>
+                    </div>
+                </div>
             </div>
         </div>
         

@@ -2252,3 +2252,41 @@ window.runThumbnailTests = () => {
     console.log('🧪 Running thumbnail tests...');
     // テスト関数をここに実装
 };
+
+// アコーディオン機能の実装
+let isAdvancedFeaturesExpanded = false;
+
+window.toggleAdvancedFeatures = () => {
+    const content = document.getElementById('advanced-features-content');
+    const arrow = document.getElementById('accordion-arrow');
+    const header = document.querySelector('.accordion-header');
+    
+    if (!content || !arrow || !header) {
+        console.error('Required accordion elements not found');
+        return;
+    }
+    
+    isAdvancedFeaturesExpanded = !isAdvancedFeaturesExpanded;
+    
+    if (isAdvancedFeaturesExpanded) {
+        // 展開
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        arrow.textContent = '▲';
+        header.classList.add('expanded');
+    } else {
+        // 折りたたみ
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        arrow.textContent = '▼';
+        header.classList.remove('expanded');
+    }
+};
+
+// 初期化時にアコーディオンを折りたたんだ状態にする
+document.addEventListener('DOMContentLoaded', () => {
+    const content = document.getElementById('advanced-features-content');
+    if (content && !content.classList.contains('collapsed')) {
+        content.classList.add('collapsed');
+    }
+});

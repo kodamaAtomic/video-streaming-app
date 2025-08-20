@@ -1325,3 +1325,157 @@ input:focus {
     background: rgba(255, 215, 0, 0.1);
     border-color: rgba(255, 215, 0, 0.3);
 }
+
+/* アコーディオン機能のスタイル */
+.accordion-container {
+    margin: 20px 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+.accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-bottom: 1px solid transparent;
+}
+
+.accordion-header:hover {
+    background: var(--accent-primary);
+    transform: translateY(-1px);
+}
+
+.accordion-header h2 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 1.2rem;
+}
+
+.accordion-arrow {
+    font-size: 1.2rem;
+    color: var(--text-secondary);
+    transition: transform 0.3s ease;
+}
+
+.accordion-header:hover .accordion-arrow {
+    color: var(--text-primary);
+}
+
+.accordion-content {
+    max-height: 1000px;
+    overflow: hidden;
+    transition: all 0.4s ease;
+    padding: 0 20px;
+}
+
+.accordion-content.collapsed {
+    max-height: 0;
+    padding: 0 20px;
+}
+
+.accordion-content.expanded {
+    padding: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.feature-section {
+    margin-bottom: 25px;
+    padding: 15px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.feature-section:hover {
+    border-color: var(--accent-primary);
+    box-shadow: 0 2px 4px var(--shadow-light);
+}
+
+.feature-section:last-child {
+    margin-bottom: 0;
+}
+
+.feature-section h3 {
+    margin: 0 0 15px 0;
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.debug-controls,
+.generation-controls,
+.stats-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.debug-controls button,
+.generation-controls button,
+.stats-controls button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.debug-controls button {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.debug-controls button:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+/* アコーディオンの開閉アニメーション */
+.accordion-header.expanded .accordion-arrow {
+    transform: rotate(180deg);
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .accordion-header {
+        padding: 12px 15px;
+    }
+    
+    .accordion-content {
+        padding: 0 15px;
+    }
+    
+    .accordion-content.expanded {
+        padding: 15px;
+    }
+    
+    .feature-section {
+        padding: 12px;
+    }
+    
+    .debug-controls,
+    .generation-controls,
+    .stats-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .debug-controls button,
+    .generation-controls button,
+    .stats-controls button {
+        width: 100%;
+        margin: 2px 0;
+    }
+}
