@@ -30,7 +30,9 @@ const VideoApp = {
     helpKeydownHandler: null,
     
     // 新機能: 再生回数、ソート、フィルタの状態
-    playCountData: {}, // {videoId: playCount}
+    playCountData: {}, // {videoId: playCount} - 現在のフォルダの再生回数
+    folderPlayCounts: {}, // {folderId: {videoId: playCount}} - フォルダ別再生回数
+    currentFolderId: null, // 現在のフォルダID
     currentSort: 'name',
     currentSortOrder: 'asc',
     currentFilter: '',
@@ -64,6 +66,9 @@ const VideoApp = {
         
         // 登録フォルダUI初期化
         this.initRegisteredFoldersUI();
+        
+        // 再生回数データの読み込み
+        this.loadPlayCountData();
     },
     
     // DOM要素の存在確認
@@ -367,6 +372,9 @@ const VideoApp = {
                 const videosWithThumbnails = result.data.filter(video => video.thumbnailUrl);
                 this.currentVideos = videosWithThumbnails;
                 
+                // 現在のフォルダ情報を取得して再生回数データを設定
+                await this.updateCurrentFolderInfo();
+                
                 // 新機能: フィルタされた動画リストをリセット
                 this.filteredVideos = [];
                 
@@ -512,10 +520,99 @@ const VideoApp = {
     // 再生回数を増加
     incrementPlayCount(videoId) {
         this.playCountData[videoId] = this.getPlayCount(videoId) + 1;
-        console.log(`📊 Play count for ${videoId}: ${this.playCountData[videoId]}`);
+        console.log(`📊 Play count for ${videoId}: ${this.playCountData[videoId]} (Folder: ${this.currentFolderId})`);
+        
+        // フォルダ別データも更新
+        if (this.currentFolderId) {
+            if (!this.folderPlayCounts[this.currentFolderId]) {
+                this.folderPlayCounts[this.currentFolderId] = {};
+            }
+            this.folderPlayCounts[this.currentFolderId][videoId] = this.playCountData[videoId];
+            
+            // 永続化
+            this.savePlayCountData();
+        }
         
         // UIを更新（再生回数オーバーレイの更新）
         this.updatePlayCountDisplay(videoId);
+    },
+    
+    // 再生回数データの読み込み
+    loadPlayCountData() {
+        try {
+            const stored = localStorage.getItem('video-app-play-counts');
+            if (stored) {
+                this.folderPlayCounts = JSON.parse(stored);
+                console.log('📊 Loaded play count data:', this.folderPlayCounts);
+            }
+        } catch (error) {
+            console.error('❌ Error loading play count data:', error);
+            this.folderPlayCounts = {};
+        }
+    },
+    
+    // 再生回数データの保存
+    savePlayCountData() {
+        try {
+            localStorage.setItem('video-app-play-counts', JSON.stringify(this.folderPlayCounts));
+            console.log('💾 Saved play count data for folder:', this.currentFolderId);
+        } catch (error) {
+            console.error('❌ Error saving play count data:', error);
+        }
+    },
+    
+    // フォルダ変更時の再生回数データ切り替え
+    switchPlayCountData(folderId) {
+        // 現在のフォルダのデータを保存
+        if (this.currentFolderId && Object.keys(this.playCountData).length > 0) {
+            this.folderPlayCounts[this.currentFolderId] = { ...this.playCountData };
+            this.savePlayCountData();
+        }
+        
+        // 新しいフォルダのデータを読み込み
+        this.currentFolderId = folderId;
+        this.playCountData = folderId && this.folderPlayCounts[folderId] 
+            ? { ...this.folderPlayCounts[folderId] } 
+            : {};
+        
+        console.log(`📁 Switched play count data to folder: ${folderId}`, this.playCountData);
+    },
+    
+    // 現在のフォルダ情報を更新
+    async updateCurrentFolderInfo() {
+        try {
+            // 登録フォルダ一覧を取得して現在のフォルダを特定
+            const response = await fetch('/api/videos/folders');
+            const result = await response.json();
+            
+            if (result.success && result.data.length > 0) {
+                // 現在のサーバー参照フォルダパスを取得
+                const debugResponse = await fetch('/api/debug/files');
+                const debugResult = await debugResponse.json();
+                
+                if (debugResult.success && debugResult.data.currentFolder) {
+                    const currentPath = debugResult.data.currentFolder;
+                    
+                    // 登録フォルダの中から一致するものを探す
+                    const matchingFolder = result.data.find(folder => folder.path === currentPath);
+                    
+                    if (matchingFolder) {
+                        // 登録フォルダが見つかった場合
+                        this.switchPlayCountData(matchingFolder.id);
+                        console.log(`📁 Found matching registered folder: ${matchingFolder.name} (${matchingFolder.id})`);
+                    } else {
+                        // 登録フォルダではない場合、パスベースのIDを生成
+                        const localFolderId = `local-${btoa(currentPath).replace(/[+/=]/g, '')}`;
+                        this.switchPlayCountData(localFolderId);
+                        console.log(`📁 Using local folder ID: ${localFolderId} for path: ${currentPath}`);
+                    }
+                }
+            } else {
+                console.log('📁 No registered folders found, using default folder handling');
+            }
+        } catch (error) {
+            console.error('❌ Error updating current folder info:', error);
+        }
     },
     
     // 再生回数表示を更新
@@ -725,6 +822,10 @@ const VideoApp = {
                 if (result.success) {
                     folderStatus.innerHTML = '<span style="color: green;">✅ サーバー参照フォルダが変更されました</span>';
                     console.log('Server folder changed successfully to:', result.data.newFolderPath);
+                    
+                    // ローカルフォルダの場合はフォルダパスをIDとして使用
+                    const localFolderId = `local-${btoa(realFolderPath).replace(/[+/=]/g, '')}`;
+                    this.switchPlayCountData(localFolderId);
                     
                     // サムネイルを再読み込み
                     await this.fetchThumbnails();
@@ -1425,6 +1526,9 @@ const VideoApp = {
             
             if (result.success) {
                 registeredStatus.innerHTML = '<span style="color: green;">✅ フォルダが切り替えられました</span>';
+                
+                // 再生回数データを切り替え
+                this.switchPlayCountData(folderId);
                 
                 // サムネイル一覧を更新
                 await this.fetchThumbnails();
