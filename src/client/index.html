@@ -68,6 +68,12 @@
                     <button id="clear-filter-btn" class="btn btn-small">クリア</button>
                 </div>
             </div>
+            
+            <!-- 新機能: タブ切り替え機能 -->
+            <div class="tab-controls">
+                <button class="tab-btn active" data-tab="all">全ての動画</button>
+                <button class="tab-btn" data-tab="favorites">お気に入り ⭐</button>
+            </div>
             <div class="debug-controls">
                 <button onclick="runThumbnailTests()">自己テスト実行</button>
                 <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>

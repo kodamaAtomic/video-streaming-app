@@ -38,6 +38,11 @@ const VideoApp = {
     currentFilter: '',
     filteredVideos: [],
     
+    // 新機能: Favorite機能の状態
+    favoriteData: {}, // {videoId: boolean} - 現在のフォルダのFavorite状態
+    folderFavorites: {}, // {folderId: {videoId: boolean}} - フォルダ別Favorite状態
+    currentTab: 'all', // 'all' または 'favorites'
+    
     // サムネイル生成状態
     thumbnailGeneration: {
         isRunning: false,
@@ -69,6 +74,9 @@ const VideoApp = {
         
         // 再生回数データの読み込み
         this.loadPlayCountData();
+        
+        // Favoriteデータの読み込み
+        this.loadFavoriteData();
     },
     
     // DOM要素の存在確認
@@ -124,6 +132,9 @@ const VideoApp = {
         
         // 新機能のイベントリスナー
         this.setupSortFilterListeners();
+        
+        // タブ切り替えのイベントリスナー
+        this.setupTabListeners();
     },
     
     // ソート・フィルタ機能のイベントリスナー設定
@@ -169,6 +180,33 @@ const VideoApp = {
                 }
             });
         }
+    },
+    
+    // タブ切り替え機能のイベントリスナー設定
+    setupTabListeners() {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const tab = e.target.dataset.tab;
+                this.switchTab(tab);
+            });
+        });
+    },
+    
+    // タブ切り替え処理
+    switchTab(tab) {
+        console.log(`🔄 Switching to tab: ${tab}`);
+        this.currentTab = tab;
+        
+        // タブボタンのアクティブ状態を更新
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.tab === tab) {
+                btn.classList.add('active');
+            }
+        });
+        
+        // 表示を更新
+        this.applySortAndFilter();
     },
     
     // キーボードショートカットの設定
@@ -441,17 +479,26 @@ const VideoApp = {
         const playCount = this.getPlayCount(video.id);
         playCountOverlay.textContent = playCount.toString();
         
+        // Favoriteアイコンオーバーレイ
+        const favoriteOverlay = document.createElement('div');
+        favoriteOverlay.className = 'favorite-overlay';
+        const isFavorited = this.isFavorite(video.id);
+        favoriteOverlay.classList.add(isFavorited ? 'favorited' : 'not-favorited');
+        favoriteOverlay.textContent = isFavorited ? '⭐' : '☆';
+        favoriteOverlay.title = isFavorited ? 'お気に入りから削除' : 'お気に入りに追加';
+        
+        // Favoriteクリックイベント
+        favoriteOverlay.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleFavorite(video.id);
+        });
+        
+        // サムネイル要素にdata-video-id属性を追加
+        thumbnailElement.setAttribute('data-video-id', video.id);
+        
         // タイトル要素
         const title = document.createElement('p');
         title.textContent = video.title || video.originalName;
-        
-        // 削除ボタン
-        const deleteButton = document.createElement('button');
-        deleteButton.textContent = '削除';
-        deleteButton.onclick = (e) => {
-            e.stopPropagation();
-            this.deleteVideo(video.id);
-        };
         
         // 画像ロードイベント
         img.onload = () => {
@@ -469,9 +516,9 @@ const VideoApp = {
         // 要素組み立て
         imageContainer.appendChild(img);
         imageContainer.appendChild(playCountOverlay);
+        imageContainer.appendChild(favoriteOverlay);
         thumbnailElement.appendChild(imageContainer);
         thumbnailElement.appendChild(title);
-        thumbnailElement.appendChild(deleteButton);
         
         // クリックイベント（モーダルで再生）
         thumbnailElement.addEventListener('click', () => {
@@ -561,6 +608,93 @@ const VideoApp = {
         }
     },
     
+    // Favoriteデータの読み込み
+    loadFavoriteData() {
+        try {
+            const stored = localStorage.getItem('video-app-favorites');
+            if (stored) {
+                this.folderFavorites = JSON.parse(stored);
+                console.log('⭐ Loaded favorite data:', this.folderFavorites);
+            }
+        } catch (error) {
+            console.error('❌ Error loading favorite data:', error);
+            this.folderFavorites = {};
+        }
+    },
+    
+    // Favoriteデータの保存
+    saveFavoriteData() {
+        try {
+            localStorage.setItem('video-app-favorites', JSON.stringify(this.folderFavorites));
+            console.log('💾 Saved favorite data for folder:', this.currentFolderId);
+        } catch (error) {
+            console.error('❌ Error saving favorite data:', error);
+        }
+    },
+    
+    // フォルダ変更時のFavoriteデータ切り替え
+    switchFavoriteData(folderId) {
+        // 現在のフォルダのデータを保存
+        if (this.currentFolderId && Object.keys(this.favoriteData).length > 0) {
+            this.folderFavorites[this.currentFolderId] = { ...this.favoriteData };
+            this.saveFavoriteData();
+        }
+        
+        // 新しいフォルダのデータを読み込み
+        this.favoriteData = folderId && this.folderFavorites[folderId] 
+            ? { ...this.folderFavorites[folderId] } 
+            : {};
+        
+        console.log(`📁 Switched favorite data to folder: ${folderId}`, this.favoriteData);
+    },
+    
+    // 動画がFavoriteかチェック
+    isFavorite(videoId) {
+        return !!this.favoriteData[videoId];
+    },
+    
+    // Favorite状態をトグル
+    toggleFavorite(videoId) {
+        console.log(`⭐ Toggling favorite for video: ${videoId}`);
+        
+        // 現在のフォルダが設定されていない場合は何もしない
+        if (!this.currentFolderId) {
+            console.warn('⚠️ No current folder set, cannot toggle favorite');
+            return false;
+        }
+        
+        this.favoriteData[videoId] = !this.favoriteData[videoId];
+        
+        // 保存
+        this.folderFavorites[this.currentFolderId] = { ...this.favoriteData };
+        this.saveFavoriteData();
+        
+        // UI更新
+        this.updateFavoriteDisplay(videoId);
+        
+        // Favoriteタブ表示中の場合、表示を更新
+        if (this.currentTab === 'favorites') {
+            this.applySortAndFilter();
+        }
+        
+        return this.favoriteData[videoId];
+    },
+    
+    // FavoriteアイコンのUI更新
+    updateFavoriteDisplay(videoId) {
+        const thumbnail = document.querySelector(`[data-video-id="${videoId}"]`);
+        if (!thumbnail) return;
+        
+        const favoriteOverlay = thumbnail.querySelector('.favorite-overlay');
+        if (!favoriteOverlay) return;
+        
+        const isFavorited = this.isFavorite(videoId);
+        favoriteOverlay.classList.toggle('favorited', isFavorited);
+        favoriteOverlay.classList.toggle('not-favorited', !isFavorited);
+        favoriteOverlay.textContent = isFavorited ? '⭐' : '☆';
+        favoriteOverlay.title = isFavorited ? 'お気に入りから削除' : 'お気に入りに追加';
+    },
+    
     // フォルダ変更時の再生回数データ切り替え
     switchPlayCountData(folderId) {
         // 現在のフォルダのデータを保存
@@ -574,6 +708,9 @@ const VideoApp = {
         this.playCountData = folderId && this.folderPlayCounts[folderId] 
             ? { ...this.folderPlayCounts[folderId] } 
             : {};
+        
+        // Favoriteデータも切り替え
+        this.switchFavoriteData(folderId);
         
         console.log(`📁 Switched play count data to folder: ${folderId}`, this.playCountData);
     },
@@ -631,11 +768,16 @@ const VideoApp = {
     
     // ソートとフィルタを適用
     applySortAndFilter() {
-        console.log(`🔍 Applying sort: ${this.currentSort} (${this.currentSortOrder}), filter: "${this.currentFilter}"`);
+        console.log(`🔍 Applying sort: ${this.currentSort} (${this.currentSortOrder}), filter: "${this.currentFilter}", tab: ${this.currentTab}`);
         
         let videos = [...this.currentVideos];
         
-        // フィルタ適用
+        // タブによるフィルタ適用
+        if (this.currentTab === 'favorites') {
+            videos = videos.filter(video => this.isFavorite(video.id));
+        }
+        
+        // テキストフィルタ適用
         if (this.currentFilter.trim()) {
             try {
                 const regex = new RegExp(this.currentFilter, 'i');
@@ -715,34 +857,6 @@ const VideoApp = {
         if (this.elements.videoModal) {
             this.elements.videoModal.style.display = 'none';
             document.body.style.overflow = 'auto'; // スクロール有効化
-        }
-    },
-    
-    // ビデオ削除
-    async deleteVideo(videoId) {
-        if (!confirm('このビデオを削除しますか？')) {
-            return;
-        }
-        
-        try {
-            console.log(`🗑️ Deleting video: ${videoId}`);
-            
-            const response = await fetch(`/api/videos/${videoId}`, {
-                method: 'DELETE'
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                console.log('✅ Video deleted successfully');
-                this.fetchThumbnails(); // 再読み込み
-            } else {
-                console.error('❌ Failed to delete video:', result.message);
-                alert(`削除に失敗しました: ${result.message}`);
-            }
-        } catch (error) {
-            console.error('❌ Error deleting video:', error);
-            alert(`エラーが発生しました: ${error.message}`);
         }
     },
     
