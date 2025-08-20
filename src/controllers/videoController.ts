@@ -617,4 +617,34 @@ export default class VideoController {
       });
     }
   }
+
+  // トランスコード中断
+  async cancelTranscode(req: Request, res: Response): Promise<void> {
+    try {
+      const { jobId } = req.params;
+      
+      console.log(`🛑 Cancelling transcode job: ${jobId}`);
+      
+      const result = await this.videoService.cancelTranscode(jobId);
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: result.message
+        });
+      } else {
+        res.status(404).json({
+          success: false,
+          message: result.message
+        });
+      }
+    } catch (error) {
+      console.error('Error cancelling transcode:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to cancel transcode',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
 }

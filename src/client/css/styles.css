@@ -1640,6 +1640,11 @@ input:focus {
     border-radius: 10px;
 }
 
+/* 中断時の赤色プログレスバー */
+.progress-fill.cancelled {
+    background: linear-gradient(90deg, #dc3545, #c82333) !important;
+}
+
 .progress-text {
     text-align: center;
     font-size: 1.1rem;
@@ -1658,6 +1663,7 @@ input:focus {
 .progress-buttons {
     display: flex;
     justify-content: center;
+    gap: 10px;
     margin-top: 20px;
 }
 
@@ -1681,4 +1687,16 @@ input:focus {
 .progress-buttons button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+.progress-buttons .btn-danger {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+.progress-buttons .btn-danger:hover:not(:disabled) {
+    background: #c82333;
+    border-color: #bd2130;
+    transform: translateY(-1px);
 }

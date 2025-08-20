@@ -85,6 +85,7 @@ router.get('/thumbnails/stats', videoController.getThumbnailStats.bind(videoCont
 // TSトランスコード機能
 router.post('/transcode', videoController.startTranscode.bind(videoController));
 router.get('/transcode/progress/:jobId', videoController.getTranscodeProgress.bind(videoController));
+router.delete('/transcode/cancel/:jobId', videoController.cancelTranscode.bind(videoController));
 
 // 個別ビデオルート（最後に配置）
 router.get('/:id', videoController.getVideoById.bind(videoController));

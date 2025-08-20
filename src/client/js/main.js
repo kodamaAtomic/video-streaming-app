@@ -2358,6 +2358,7 @@ window.showTranscodeProgress = (jobId) => {
             </div>
             <div class="progress-status" id="progress-status-${jobId}">準備中...</div>
             <div class="progress-buttons">
+                <button class="btn-danger" id="progress-cancel-btn-${jobId}" onclick="cancelTranscode('${jobId}')">中断</button>
                 <button class="btn-secondary" id="progress-close-btn-${jobId}" onclick="closeProgressDialog('${jobId}')" disabled>閉じる</button>
             </div>
         </div>
@@ -2371,7 +2372,19 @@ window.showTranscodeProgress = (jobId) => {
 
 // プログレス監視機能
 window.startProgressMonitoring = (jobId) => {
+    let isCancelled = false; // 中断状態を追跡
+    let intervalId = null; // インターバルIDを保存
+    
     const checkProgress = async () => {
+        // 中断された場合は監視を完全に停止
+        if (isCancelled) {
+            if (intervalId) {
+                clearTimeout(intervalId);
+                intervalId = null;
+            }
+            return;
+        }
+        
         try {
             const response = await fetch(`/api/videos/transcode/progress/${jobId}`);
             const result = await response.json();
@@ -2379,13 +2392,18 @@ window.startProgressMonitoring = (jobId) => {
             if (result.success) {
                 const { progress, status } = result.data;
                 
-                // プログレスバー更新
+                // プログレスバー更新（中断されていない場合のみ）
                 const progressFill = document.getElementById(`progress-fill-${jobId}`);
                 const progressText = document.getElementById(`progress-text-${jobId}`);
                 const progressStatus = document.getElementById(`progress-status-${jobId}`);
                 const closeBtn = document.getElementById(`progress-close-btn-${jobId}`);
+                const cancelBtn = document.getElementById(`progress-cancel-btn-${jobId}`);
+                
+                // 中断されている場合は更新を停止
+                if (isCancelled) return;
                 
                 if (progressFill && progressText && progressStatus) {
+                    // 通常のプログレス更新
                     progressFill.style.width = `${progress}%`;
                     progressText.textContent = `${Math.round(progress)}%`;
                     
@@ -2394,6 +2412,7 @@ window.startProgressMonitoring = (jobId) => {
                         progressStatus.textContent = '✅ 完了しました！';
                         closeBtn.disabled = false;
                         closeBtn.textContent = '閉じる';
+                        if (cancelBtn) cancelBtn.style.display = 'none';
                         
                         // ビデオリストを再読み込み
                         setTimeout(() => {
@@ -2405,6 +2424,11 @@ window.startProgressMonitoring = (jobId) => {
                         progressStatus.textContent = '❌ エラーが発生しました';
                         closeBtn.disabled = false;
                         closeBtn.textContent = '閉じる';
+                        if (cancelBtn) cancelBtn.style.display = 'none';
+                        return; // 監視終了
+                    } else if (status === 'cancelled') {
+                        // サーバー側から中断状態が返された場合も監視停止
+                        isCancelled = true;
                         return; // 監視終了
                     } else {
                         progressStatus.textContent = '🔄 変換中...';
@@ -2412,19 +2436,34 @@ window.startProgressMonitoring = (jobId) => {
                 }
             }
         } catch (error) {
-            console.error('Progress check error:', error);
-            const progressStatus = document.getElementById(`progress-status-${jobId}`);
-            if (progressStatus) {
-                progressStatus.textContent = '❌ 進捗取得エラー';
+            // 中断されている場合はエラーログも出力しない
+            if (!isCancelled) {
+                console.error('Progress check error:', error);
+                const progressStatus = document.getElementById(`progress-status-${jobId}`);
+                if (progressStatus) {
+                    progressStatus.textContent = '❌ 進捗取得エラー';
+                }
             }
         }
         
-        // 2秒後に再チェック
-        setTimeout(checkProgress, 2000);
+        // 中断されていない場合のみ次のチェックをスケジュール
+        if (!isCancelled) {
+            intervalId = setTimeout(checkProgress, 2000);
+        }
     };
     
     // 最初のチェック
     checkProgress();
+    
+    // 中断状態を外部から設定できるように関数を追加
+    window[`setCancelledStatus_${jobId}`] = () => {
+        isCancelled = true;
+        if (intervalId) {
+            clearTimeout(intervalId);
+            intervalId = null;
+        }
+        console.log(`🛑 Progress monitoring stopped for job: ${jobId}`);
+    };
 };
 
 // プログレスダイアログを閉じる
@@ -2432,6 +2471,99 @@ window.closeProgressDialog = (jobId) => {
     const dialog = document.querySelector('.transcode-progress-dialog');
     if (dialog) {
         dialog.remove();
+    }
+};
+
+// トランスコード中断機能
+window.cancelTranscode = async (jobId) => {
+    try {
+        // 確認ダイアログを表示
+        const confirmed = confirm('トランスコードを中断しますか？\n作成中のMP4ファイルは削除されます。');
+        if (!confirmed) return;
+
+        console.log(`🛑 Cancelling transcode: ${jobId}`);
+
+        // プログレス監視を即座に停止（API呼び出し前に停止）
+        if (typeof window[`setCancelledStatus_${jobId}`] === 'function') {
+            window[`setCancelledStatus_${jobId}`]();
+        }
+
+        // 中断ボタンを無効化
+        const cancelBtn = document.getElementById(`progress-cancel-btn-${jobId}`);
+        const progressStatus = document.getElementById(`progress-status-${jobId}`);
+        const progressFill = document.getElementById(`progress-fill-${jobId}`);
+        const progressText = document.getElementById(`progress-text-${jobId}`);
+        
+        // 即座に0%表示にして赤色に変更
+        if (progressFill) {
+            progressFill.classList.add('cancelled');
+            progressFill.style.width = '0%';
+        }
+        if (progressText) {
+            progressText.textContent = '0%';
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.disabled = true;
+            cancelBtn.textContent = '中断中...';
+        }
+        
+        if (progressStatus) {
+            progressStatus.textContent = '🛑 中断処理中...';
+        }
+
+        // 中断API呼び出し
+        const response = await fetch(`/api/videos/transcode/cancel/${jobId}`, {
+            method: 'DELETE'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log('✅ Transcode cancelled successfully');
+            
+            // ステータス更新（0%で停止を明記）
+            if (progressStatus) {
+                progressStatus.textContent = '⏹️ 中断されました';
+            }
+            
+            // 閉じるボタンを有効化
+            const closeBtn = document.getElementById(`progress-close-btn-${jobId}`);
+            if (closeBtn) {
+                closeBtn.disabled = false;
+            }
+            
+            // キャンセルボタンを非表示
+            if (cancelBtn) {
+                cancelBtn.style.display = 'none';
+            }
+            
+            // ビデオリストを再読み込み（TSサムネイルを復元）
+            setTimeout(() => {
+                VideoApp.fetchThumbnails();
+            }, 1000);
+            
+        } else {
+            throw new Error(result.message || 'Failed to cancel transcode');
+        }
+
+    } catch (error) {
+        console.error('Cancel transcode error:', error);
+        
+        // エラー時の処理
+        const progressStatus = document.getElementById(`progress-status-${jobId}`);
+        const cancelBtn = document.getElementById(`progress-cancel-btn-${jobId}`);
+        
+        if (progressStatus) {
+            progressStatus.textContent = '❌ 中断に失敗しました';
+        }
+        
+        if (cancelBtn) {
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = '中断';
+        }
+        
+        alert(`中断エラー: ${error.message}`);
     }
 };
 

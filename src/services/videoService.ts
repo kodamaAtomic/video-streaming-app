@@ -9,6 +9,7 @@ export default class VideoService {
   private readonly thumbnailGenerator: ThumbnailGenerator;
   private videos: Map<string, VideoMetadata> = new Map();
   private readonly registeredFoldersFile: string;
+  private transcodeProcesses: Map<string, any> = new Map(); // FFmpegプロセス管理
 
   constructor(videoDir?: string) {
     this.videoDir = videoDir || path.join(__dirname, '../storage/videos');
@@ -540,6 +541,67 @@ export default class VideoService {
     };
   }
 
+  // トランスコード中断機能
+  async cancelTranscode(jobId: string): Promise<{ success: boolean; message: string }> {
+    try {
+      // 実行中のFFmpegプロセスを停止
+      const ffmpegProcess = this.transcodeProcesses.get(jobId);
+      if (ffmpegProcess) {
+        console.log(`🛑 Cancelling transcode job: ${jobId}`);
+        
+        // FFmpegプロセスを強制終了
+        if (ffmpegProcess.kill) {
+          ffmpegProcess.kill('SIGKILL');
+        }
+        
+        // プロセス管理マップから削除
+        this.transcodeProcesses.delete(jobId);
+      }
+
+      // 実行中のトランスコードを見つけて停止
+      const transcodingVideo = Array.from(this.videos.values()).find(v => v.isTranscoding);
+      if (transcodingVideo) {
+        console.log(`🔄 Resetting video state: ${transcodingVideo.originalName}`);
+        
+        // 出力ファイルのパスを生成
+        const outputPath = path.join(path.dirname(transcodingVideo.path), path.basename(transcodingVideo.path, '.ts') + '.mp4');
+        
+        // 作成中のMP4ファイルを削除
+        if (fs.existsSync(outputPath)) {
+          try {
+            fs.unlinkSync(outputPath);
+            console.log(`🗑️ Deleted partial MP4 file: ${outputPath}`);
+          } catch (deleteError) {
+            console.warn(`⚠️ Could not delete partial MP4 file: ${deleteError}`);
+          }
+        }
+
+        // TSファイルの状態をリセット（プログレスは保持しない）
+        transcodingVideo.isTranscoding = false;
+        transcodingVideo.transcodeProgress = 0; // 中断時は0にリセット
+        
+        console.log(`✅ Transcode cancelled for: ${transcodingVideo.originalName}`);
+        
+        return {
+          success: true,
+          message: 'Transcode cancelled successfully'
+        };
+      }
+
+      return {
+        success: false,
+        message: 'No active transcode job found'
+      };
+
+    } catch (error) {
+      console.error('❌ Error cancelling transcode:', error);
+      return {
+        success: false,
+        message: 'Failed to cancel transcode'
+      };
+    }
+  }
+
   // 実際のトランスコード処理（プライベートメソッド）
   private async performTranscode(videoId: string, jobId: string): Promise<void> {
     const video = this.videos.get(videoId);
@@ -562,7 +624,7 @@ export default class VideoService {
       }
 
       await new Promise<void>((resolve, reject) => {
-        ffmpeg(inputPath)
+        const ffmpegProcess = ffmpeg(inputPath)
           .outputOptions([
             '-c:v', 'libx264',      // H.264 video codec
             '-preset', 'fast',      // エンコード速度優先
@@ -574,6 +636,8 @@ export default class VideoService {
           ])
           .on('start', (commandLine: string) => {
             console.log(`🚀 FFmpeg command: ${commandLine}`);
+            // プロセスを管理マップに追加
+            this.transcodeProcesses.set(jobId, ffmpegProcess);
           })
           .on('progress', (progress: any) => {
             const percent = Math.round(progress.percent || 0);
@@ -586,10 +650,14 @@ export default class VideoService {
           })
           .on('end', () => {
             console.log('✅ Transcode completed successfully');
+            // プロセス管理マップから削除
+            this.transcodeProcesses.delete(jobId);
             resolve();
           })
           .on('error', (error: any) => {
             console.error('❌ Transcode error:', error);
+            // プロセス管理マップから削除
+            this.transcodeProcesses.delete(jobId);
             reject(error);
           })
           .save(outputPath);
