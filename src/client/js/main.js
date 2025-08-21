@@ -2980,6 +2980,57 @@ const VideoApp = {
 // ページ読み込み完了後に初期化
 document.addEventListener('DOMContentLoaded', async () => {
     try {
+        // Service Worker の登録
+        if ('serviceWorker' in navigator) {
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                console.log('✅ Service Worker registered:', registration);
+                
+                // PWAインストールプロンプト
+                let deferredPrompt;
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    console.log('💡 PWA install prompt available');
+                    e.preventDefault();
+                    deferredPrompt = e;
+                    
+                    // インストールボタンを表示（オプション）
+                    const installButton = document.createElement('button');
+                    installButton.textContent = '📱 アプリをインストール';
+                    installButton.className = 'btn btn-primary';
+                    installButton.style.cssText = `
+                        position: fixed;
+                        bottom: 20px;
+                        right: 20px;
+                        z-index: 1000;
+                        border-radius: 25px;
+                        box-shadow: 0 4px 20px rgba(0, 123, 255, 0.3);
+                    `;
+                    
+                    installButton.addEventListener('click', async () => {
+                        if (deferredPrompt) {
+                            deferredPrompt.prompt();
+                            const { outcome } = await deferredPrompt.userChoice;
+                            console.log('PWA install outcome:', outcome);
+                            deferredPrompt = null;
+                            installButton.remove();
+                        }
+                    });
+                    
+                    document.body.appendChild(installButton);
+                    
+                    // 30秒後に自動で非表示
+                    setTimeout(() => {
+                        if (installButton.parentNode) {
+                            installButton.remove();
+                        }
+                    }, 30000);
+                });
+                
+            } catch (error) {
+                console.error('❌ Service Worker registration failed:', error);
+            }
+        }
+
         await VideoApp.init();
         console.log('✅ VideoApp initialization completed');
     } catch (error) {
@@ -3463,3 +3514,105 @@ document.addEventListener('DOMContentLoaded', () => {
         content.classList.add('collapsed');
     }
 });
+
+// Service Worker 登録 (PWA対応)
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+        try {
+            console.log('📦 Registering Service Worker...');
+            const registration = await navigator.serviceWorker.register('/service-worker.js');
+            
+            console.log('✅ Service Worker registered successfully:', registration.scope);
+            
+            // アップデート検知
+            registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                console.log('🔄 Service Worker update found');
+                
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        console.log('🆕 New content is available, please refresh.');
+                        // 必要に応じてユーザーに更新を通知
+                        if (confirm('新しいバージョンが利用可能です。ページを更新しますか？')) {
+                            window.location.reload();
+                        }
+                    }
+                });
+            });
+            
+            // Service Worker メッセージリスナー
+            navigator.serviceWorker.addEventListener('message', event => {
+                console.log('📩 Message from Service Worker:', event.data);
+            });
+            
+        } catch (error) {
+            console.error('❌ Service Worker registration failed:', error);
+        }
+    });
+}
+
+// オンライン/オフライン状態の監視
+window.addEventListener('online', () => {
+    console.log('🌐 Back online!');
+    document.body.classList.remove('offline');
+    
+    // オンライン復帰時にデータを再取得
+    if (typeof VideoApp !== 'undefined' && VideoApp.fetchThumbnails) {
+        VideoApp.fetchThumbnails();
+    }
+});
+
+window.addEventListener('offline', () => {
+    console.log('📱 Gone offline!');
+    document.body.classList.add('offline');
+});
+
+// タッチ操作の最適化
+if ('ontouchstart' in window) {
+    console.log('📱 Touch device detected, optimizing for touch');
+    document.body.classList.add('touch-device');
+    
+    // iOS Safari のバウンス効果を無効化
+    document.body.addEventListener('touchstart', {}, { passive: true });
+    document.body.addEventListener('touchend', {}, { passive: true });
+    document.body.addEventListener('touchmove', (e) => {
+        if (e.target === document.body) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+}
+
+// デバイス向き変更の検知
+window.addEventListener('orientationchange', () => {
+    console.log('📱 Orientation changed');
+    setTimeout(() => {
+        // レイアウトの再計算
+        if (typeof VideoApp !== 'undefined' && VideoApp.applySortAndFilter) {
+            VideoApp.applySortAndFilter();
+        }
+    }, 500);
+});
+
+// バックグラウンド同期サポート
+if ('serviceWorker' in navigator && 'sync' in window.ServiceWorkerRegistration.prototype) {
+    console.log('🔄 Background Sync is supported');
+}
+
+// Web Share API サポート（モバイルでの共有機能）
+if (navigator.share) {
+    console.log('📤 Web Share API is supported');
+    
+    // 共有ボタンの機能を追加（必要に応じて）
+    window.shareVideo = async (videoData) => {
+        try {
+            await navigator.share({
+                title: videoData.title || 'Video',
+                text: 'ビデオを共有します',
+                url: window.location.origin + '/video/' + videoData.id
+            });
+            console.log('📤 Video shared successfully');
+        } catch (error) {
+            console.log('📤 Share cancelled or failed:', error);
+        }
+    };
+}

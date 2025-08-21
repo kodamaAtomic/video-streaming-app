@@ -2,11 +2,239 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
+    <meta name="description" content="モダンなビデオストリーミングアプリケーション - サムネイル生成、プログレッシブ再生対応">
+    <meta name="theme-color" content="#007bff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="VideoApp">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="format-detection" content="telephone=no">
     <title>Video Streaming App</title>
     <link rel="stylesheet" href="/css/styles.css">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
 </head>
 <body>
+    <!-- PWA インストールバナー -->
+    <div id="install-banner" class="install-banner">
+        <div class="banner-content">
+            <div class="banner-icon">📱</div>
+            <div class="banner-text">
+                <div class="banner-title">アプリとしてインストール</div>
+                <div class="banner-subtitle">ホーム画面に追加して、より便利に使えます</div>
+            </div>
+        </div>
+        <div class="banner-actions">
+            <button id="install-btn">インストール</button>
+            <button id="install-dismiss" class="dismiss">後で</button>
+        </div>
+    </div>
+
+    <!-- プルトゥリフレッシュインジケーター -->
+    <div id="pull-to-refresh-indicator" class="pull-to-refresh-indicator">
+        <div class="refresh-icon">🔄</div>
+    </div>
+
+    <div class="container">
+        <h1>Video Streaming App</h1>
+        
+        <!-- コントロールセクション -->
+        <div id="control-section">
+            <div class="folder-controls">
+                <label>サーバー参照フォルダ選択:</label>
+                <button id="folder-select-btn" onclick="selectVideoFolder()">📁 フォルダを選択</button>
+                <span id="selected-folder-path" class="folder-path-display">フォルダが選択されていません</span>
+                <button id="change-folder-btn" onclick="changeVideoFolder()" disabled>サーバー参照フォルダに設定</button>
+                
+                <div id="folder-status"></div>
+            </div>
+            
+            <!-- 登録フォルダ管理 -->
+            <div class="registered-folders-section">
+                <h3>📚 登録済みフォルダ</h3>
+                <div class="folder-selector">
+                    <select id="registered-folders-select" class="folder-select">
+                        <option value="">フォルダを選択してください</option>
+                    </select>
+                    <button id="apply-registered-btn" class="btn btn-primary">適用</button>
+                </div>
+                <div class="folder-actions">
+                    <button id="register-current-btn" class="btn btn-secondary">📁 現在のフォルダを登録</button>
+                    <button id="remove-registered-btn" class="btn btn-danger">🗑️ 選択したフォルダを削除</button>
+                </div>
+                <div id="registered-status" class="status-message"></div>
+            </div>
+            <div class="view-controls">
+                <label>表示数:</label>
+                <button class="view-btn active" data-count="24">24</button>
+                <button class="view-btn" data-count="48">48</button>
+                <button class="view-btn" data-count="96">96</button>
+            </div>
+            
+            <!-- 新機能: ソート・フィルタ機能 -->
+            <div class="sort-filter-controls">
+                <div class="sort-control">
+                    <label for="sort-select">ソート:</label>
+                    <select id="sort-select" class="sort-select">
+                        <option value="name">名前順</option>
+                        <option value="playCount">再生回数順</option>
+                        <option value="timestamp">更新日時順</option>
+                    </select>
+                    <button id="sort-order-btn" class="btn btn-small" data-order="asc">昇順 ↑</button>
+                </div>
+                <div class="filter-control">
+                    <label for="filter-input">フィルタ:</label>
+                    <input type="text" id="filter-input" class="filter-input" placeholder="ファイル名で検索 (正規表現対応)">
+                    <button id="clear-filter-btn" class="btn btn-small">クリア</button>
+                </div>
+            </div>
+            
+            <!-- 新機能: タブ切り替え機能 -->
+            <div class="tab-controls">
+                <button class="tab-btn active" data-tab="all">全ての動画</button>
+                <button class="tab-btn" data-tab="favorites">お気に入り ⭐</button>
+            </div>
+        </div>
+        
+        <!-- 詳細機能アコーディオン -->
+        <div id="advanced-features-accordion" class="accordion-container">
+            <div class="accordion-header" onclick="toggleAdvancedFeatures()">
+                <h2>🔧 詳細機能</h2>
+                <span id="accordion-arrow" class="accordion-arrow">▼</span>
+            </div>
+            <div id="advanced-features-content" class="accordion-content collapsed">
+                <!-- ビデオアップロード部分 -->
+                <div id="upload-section" class="feature-section">
+                    <h3>📤 ビデオをアップロード</h3>
+                    <input type="file" id="video-upload" accept="video/*">
+                    <button onclick="uploadVideo()">アップロード</button>
+                    <div id="upload-progress"></div>
+                </div>
+                
+                <!-- デバッグ・テスト機能 -->
+                <div id="debug-section" class="feature-section">
+                    <h3>🔍 開発・テスト機能</h3>
+                    <div class="debug-controls">
+                        <button onclick="runThumbnailTests()">自己テスト実行</button>
+                        <button onclick="debugFetchThumbnails()">サムネイル再読み込み</button>
+                    </div>
+                </div>
+                
+                <!-- 高速サムネイル生成機能 -->
+                <div id="thumbnail-generation-section" class="feature-section">
+                    <h3>⚡ 高速サムネイル生成</h3>
+                    <div class="generation-controls">
+                        <button onclick="generateThumbnailsBatch()" class="btn-primary">🎬 標準並列生成</button>
+                        <button onclick="generateThumbnailsUltraFast()" class="btn-fast">⚡ 超高速生成</button>
+                        <button onclick="generateThumbnailsProgressive()" class="btn-info">🎯 プログレッシブ生成</button>
+                    </div>
+                </div>
+                
+                <!-- 統計・分析機能 -->
+                <div id="stats-section" class="feature-section">
+                    <h3>📊 統計・分析</h3>
+                    <div class="stats-controls">
+                        <button onclick="getThumbnailStats()" class="btn-secondary">📊 統計情報</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- サムネイルグリッド -->
+        <div id="thumbnail-section">
+            <h2>ビデオ一覧</h2>
+            
+            <!-- サムネイル生成プログレスバー -->
+            <div id="thumbnail-progress-container" class="progress-container" style="display: none;">
+                <div class="progress-info">
+                    <span id="progress-text">サムネイルを生成中...</span>
+                    <span id="progress-current">0</span>/<span id="progress-total">0</span>
+                    <span id="bulk-progress-percentage">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="bulk-progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="progress-details" class="progress-details"></div>
+            </div>
+            
+            <div id="thumbnail-grid" class="grid-24">
+                <p>ロード中...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- モーダルビデオプレイヤー -->
+    <div id="video-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-video-title">Video Title</h3>
+                <span class="close-btn" onclick="closeVideoPlayer()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <video id="video-player" controls playsinline>
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        </div>
+    </div>
+
+    <!-- フォルダ選択モーダル -->
+    <div id="folder-selection-modal" class="modal">
+        <div class="modal-content folder-selection-content">
+            <div class="modal-header">
+                <h2>📁 フォルダ選択</h2>
+                <span class="modal-close" onclick="closeFolderSelectionModal()">&times;</span>
+            </div>
+            
+            <div class="modal-body">
+                <div class="platform-info">
+                    <span id="platform-display"></span>
+                </div>
+                
+                <div class="selection-methods">
+                    <div class="method-section">
+                        <h3>🎯 ファイルダイアログで選択</h3>
+                        <p>ブラウザのファイル選択ダイアログを使用してフォルダを選択します</p>
+                        <button id="dialog-select-btn" class="btn btn-primary">
+                            📂 ダイアログを開く
+                        </button>
+                        <div id="dialog-status" class="status-message"></div>
+                    </div>
+                    
+                    <div class="divider">または</div>
+                    
+                    <div class="method-section">
+                        <h3>✏️ パスを手動入力</h3>
+                        <p>フォルダの完全パスを直接入力します</p>
+                        <div class="path-input-group">
+                            <input type="text" id="manual-path-input" placeholder="フォルダのフルパスを入力...">
+                            <button id="browse-suggested-btn" class="btn btn-secondary">
+                                💡 候補を表示
+                            </button>
+                        </div>
+                        <div id="path-suggestions" class="path-suggestions"></div>
+                        <div id="manual-status" class="status-message"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button id="confirm-selection-btn" class="btn btn-success" disabled>
+                    ✅ 選択確定
+                </button>
+                <button class="btn btn-secondary" onclick="closeFolderSelectionModal()">
+                    ❌ キャンセル
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- メインJavaScriptファイル -->
+    <script src="/js/main.js"></script>
+</body>
+</html>
     <div class="container">
         <h1>Video Streaming App</h1>
         
