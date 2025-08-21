@@ -11,15 +11,39 @@ export default class VideoService {
   private videos: Map<string, VideoMetadata> = new Map();
   private readonly registeredFoldersFile: string;
   private transcodeProcesses: Map<string, any> = new Map(); // FFmpegプロセス管理
+  private backgroundThumbnailProgress: {
+    isGenerating: boolean;
+    total: number;
+    completed: number;
+    currentVideo?: string;
+  };
+  private isGeneratingThumbnails = false; // 重複実行防止フラグ
+  private isChangingDirectory = false; // ディレクトリ変更中フラグ
+  private cancelThumbnailGeneration = false; // サムネイル生成キャンセルフラグ
+  private existingThumbnails = new Map<string, string>(); // サムネイル保持用（videoId -> thumbnailPath）
 
   constructor(videoDir?: string) {
     this.videoDir = videoDir || path.join(__dirname, '../storage/videos');
     this.thumbnailGenerator = new ThumbnailGenerator(path.join(__dirname, '../storage/thumbnails'));
     this.registeredFoldersFile = path.join(__dirname, '../storage/registeredFolders.json');
+    this.backgroundThumbnailProgress = {
+      isGenerating: false,
+      total: 0,
+      completed: 0,
+      currentVideo: undefined
+    };
+    this.isGeneratingThumbnails = false; // ロックフラグを初期化
+    this.isChangingDirectory = false; // ディレクトリ変更ロックを初期化
+    this.cancelThumbnailGeneration = false; // キャンセルフラグを初期化
+    this.existingThumbnails = new Map(); // 既存サムネイル保持用を初期化
     console.log(`Video directory set to: ${this.videoDir}`);
     console.log(`Current __dirname: ${__dirname}`);
     this.initializeVideoDir();
     this.loadVideos();
+  }
+
+  get videoDirectory(): string {
+    return this.videoDir;
   }
 
   private initializeVideoDir(): void {
@@ -34,131 +58,8 @@ export default class VideoService {
   }
 
   private async loadVideos(): Promise<void> {
-    try {
-      const files = fs.readdirSync(this.videoDir);
-      
-      // 通常のビデオファイルとTSファイルを分別
-      const videoFiles = files.filter(file => 
-        ['.mp4', '.avi', '.mov', '.mkv', '.webm'].some(ext => 
-          file.toLowerCase().endsWith(ext)
-        )
-      );
-      
-      const tsFiles = files.filter(file => 
-        file.toLowerCase().endsWith('.ts')
-      );
-
-      console.log(`Found ${videoFiles.length} video files and ${tsFiles.length} TS files in ${this.videoDir}`);
-      
-      // ビデオメタデータの生成（並列処理なし）
-      const videoMetadatas: VideoMetadata[] = [];
-      
-      for (const file of videoFiles) {
-        try {
-          const videoPath = path.join(this.videoDir, file);
-          const stats = fs.statSync(videoPath);
-          const videoId = path.parse(file).name;
-          
-          const metadata: VideoMetadata = {
-            id: videoId,
-            filename: file,
-            originalName: file,
-            path: videoPath,
-            size: stats.size,
-            mimetype: this.getMimeType(file),
-            uploadDate: stats.mtime,
-            createdAt: stats.mtime,
-            updatedAt: stats.mtime,
-            thumbnailPath: undefined
-          };
-
-          videoMetadatas.push(metadata);
-          this.videos.set(videoId, metadata);
-          console.log(`Loaded video metadata: ${file}`);
-        } catch (error) {
-          console.error(`Error loading video ${file}:`, error);
-        }
-      }
-
-      // TSファイルのメタデータ生成
-      for (const tsFile of tsFiles) {
-        try {
-          // 同名のMP4ファイルが存在するかチェック
-          const baseName = path.basename(tsFile, '.ts');
-          const mp4Exists = videoFiles.some(videoFile => 
-            path.basename(videoFile, path.extname(videoFile)) === baseName
-          );
-
-          if (!mp4Exists) {
-            const tsPath = path.join(this.videoDir, tsFile);
-            const stats = fs.statSync(tsPath);
-            const videoId = this.generateVideoId(tsFile);
-
-            const metadata: VideoMetadata = {
-              id: videoId,
-              filename: tsFile,
-              originalName: tsFile,
-              path: tsPath,
-              size: stats.size,
-              mimetype: 'video/mp2t',
-              thumbnailPath: '', // TSロゴサムネイルは後で設定
-              uploadDate: stats.mtime,
-              createdAt: stats.mtime,
-              updatedAt: stats.mtime,
-              timestamp: stats.mtime.toISOString(),
-              playCount: 0,
-              isFavorite: false,
-              isTranscoding: false,
-              isTs: true // TSファイルフラグ
-            };
-
-            this.videos.set(videoId, metadata);
-            console.log(`Loaded TS file metadata: ${tsFile}`);
-          } else {
-            console.log(`Skipping TS file ${tsFile} - MP4 version exists`);
-          }
-        } catch (error) {
-          console.error(`Error loading TS file ${tsFile}:`, error);
-        }
-      }
-
-      // サムネイル生成を並列実行（TSファイルは除外）
-      if (videoMetadatas.length > 0) {
-        const nonTsVideos = videoMetadatas.filter(video => !video.path.toLowerCase().endsWith('.ts'));
-        console.log(`🚀 Starting parallel thumbnail generation for ${nonTsVideos.length} videos (${videoMetadatas.length - nonTsVideos.length} TS files skipped)`);
-        
-        // TSファイル以外のみをサムネイル生成対象とする
-        const thumbnailJobs = nonTsVideos.map(video => ({
-          videoPath: video.path,
-          videoId: video.id
-        }));
-
-        const result = await this.thumbnailGenerator.generateThumbnailsConcurrent(thumbnailJobs, {
-          skipExisting: true,
-          optimizeSettings: true
-        });
-
-        // サムネイルパスを更新
-        result.successful.forEach(thumbnailPath => {
-          const filename = path.basename(thumbnailPath);
-          const videoId = filename.replace('_thumbnail.png', '');
-          const video = this.videos.get(videoId);
-          if (video) {
-            video.thumbnailPath = thumbnailPath;
-            console.log(`✅ Thumbnail linked: ${video.originalName}`);
-          }
-        });
-
-        // エラー情報をログ出力
-        result.failed.forEach(({ videoId, error }) => {
-          console.error(`❌ Thumbnail generation failed for ${videoId}: ${error}`);
-        });
-
-        console.log(`🏁 Thumbnail generation completed: ${result.successful.length} successful, ${result.failed.length} failed`);
-      }
-    } catch (error) {
-      console.error('Error loading videos:', error);
-    }
+    await this.loadVideoMetadataOnly();
+    await this.generateThumbnailsInBackground();
   }
 
   private getMimeType(filename: string): string {
@@ -174,7 +75,37 @@ export default class VideoService {
   }
 
   async getAllVideos(): Promise<VideoMetadata[]> {
-    return Array.from(this.videos.values());
+    console.log('🔍 VideoService.getAllVideos called');
+    console.log(`📊 Current videos map size: ${this.videos.size}`);
+    
+    const videosArray = Array.from(this.videos.values());
+    console.log(`🔄 Converting to array: ${videosArray.length} videos`);
+    
+    // 各ビデオのサムネイル状況を確認
+    videosArray.forEach((video, index) => {
+      // サムネイルパスが未設定の場合、既存のサムネイルから復元を試行
+      if (!video.thumbnailPath && this.existingThumbnails.has(video.id)) {
+        const cachedPath = this.existingThumbnails.get(video.id);
+        if (cachedPath && fs.existsSync(cachedPath)) {
+          video.thumbnailPath = cachedPath;
+          console.log(`  🔄 Restored thumbnail path for ${video.originalName}: ${cachedPath}`);
+        }
+      }
+      
+      const thumbnailStatus = video.thumbnailPath ? 
+        (fs.existsSync(video.thumbnailPath) ? '✅ exists' : '❌ missing') : 
+        '⚪ no path';
+      console.log(`  Video ${index + 1}: ${video.originalName} - thumbnail: ${thumbnailStatus}`);
+      
+      // サムネイルパスが設定されているが実際のファイルが存在しない場合はパスをクリア
+      if (video.thumbnailPath && !fs.existsSync(video.thumbnailPath)) {
+        console.log(`  🧹 Clearing invalid thumbnail path for ${video.originalName}`);
+        video.thumbnailPath = undefined;
+      }
+    });
+    
+    console.log('✅ VideoService.getAllVideos completed');
+    return videosArray;
   }
 
   async getVideoById(id: string): Promise<VideoMetadata | undefined> {
@@ -275,6 +206,12 @@ export default class VideoService {
   }
 
   async changeVideoDirectory(newPath: string): Promise<void> {
+    // 既にディレクトリ変更中の場合は待機
+    if (this.isChangingDirectory) {
+      console.log('🛑 Directory change already in progress, skipping duplicate request');
+      return;
+    }
+
     if (!fs.existsSync(newPath)) {
       throw new Error(`Directory does not exist: ${newPath}`);
     }
@@ -284,13 +221,353 @@ export default class VideoService {
       throw new Error(`Path is not a directory: ${newPath}`);
     }
 
-    console.log(`Changing video directory from ${this.videoDir} to ${newPath}`);
-    this.videoDir = newPath;
+    try {
+      // ディレクトリ変更ロックを設定
+      this.isChangingDirectory = true;
+
+      // サムネイル生成中の場合は完了を待機（キャンセルしない）
+      if (this.isGeneratingThumbnails) {
+        console.log('⏳ Waiting for current thumbnail generation to complete before changing directory...');
+        console.log('📊 Current generation will continue to completion to preserve progress');
+        
+        // 最大5分待機（大量ファイル処理への対応）
+        let waitTime = 0;
+        const maxWaitTime = 300000; // 5分
+        const checkInterval = 2000; // 2秒
+
+        while (this.isGeneratingThumbnails && waitTime < maxWaitTime) {
+          await new Promise(resolve => setTimeout(resolve, checkInterval));
+          waitTime += checkInterval;
+          
+          // 進行状況をログに表示（10秒ごと）
+          if (waitTime % 10000 === 0) {
+            console.log(`⏳ Still waiting for thumbnail generation... (${waitTime/1000}s elapsed)`);
+            console.log(`📊 Progress: ${this.backgroundThumbnailProgress.completed}/${this.backgroundThumbnailProgress.total}`);
+          }
+        }
+
+        if (this.isGeneratingThumbnails) {
+          console.log('⚠️ Thumbnail generation taking too long, proceeding with directory change');
+          console.log('⚠️ Previous generation may continue in background');
+        } else {
+          console.log('✅ Previous thumbnail generation completed successfully');
+        }
+      }
+
+      console.log(`Changing video directory from ${this.videoDir} to ${newPath}`);
+      
+      // 現在のビデオとサムネイル情報をバックアップ（累積式）
+      for (const [videoId, video] of this.videos.entries()) {
+        if (video.thumbnailPath && fs.existsSync(video.thumbnailPath)) {
+          this.existingThumbnails.set(videoId, video.thumbnailPath);
+          console.log(`💾 Backing up thumbnail: ${videoId} -> ${video.thumbnailPath}`);
+        }
+      }
+      
+      this.videoDir = newPath;
+      
+      console.log(`Video directory changed to: ${this.videoDir}`);
+      
+      // サムネイル生成を非同期で開始
+      await this.loadVideosAsync();
+    } finally {
+      // ディレクトリ変更ロックを解除
+      this.isChangingDirectory = false;
+      console.log('🔓 Directory change lock released');
+    }
+  }
+
+  // 非同期でのビデオロード（サムネイル生成を含む）
+  private async loadVideosAsync(): Promise<void> {
+    try {
+      // まずはビデオメタデータのみロード
+      await this.loadVideoMetadataOnly();
+      
+      // サムネイル生成を非同期で開始
+      this.generateThumbnailsInBackground();
+    } catch (error) {
+      console.error('Error in async video loading:', error);
+    }
+  }
+
+  // ビデオメタデータのみをロード（サムネイル生成なし）
+  private async loadVideoMetadataOnly(): Promise<void> {
+    try {
+      const files = fs.readdirSync(this.videoDir);
+      
+      // 通常のビデオファイルとTSファイルを分別
+      const videoFiles = files.filter(file => 
+        ['.mp4', '.avi', '.mov', '.mkv', '.webm'].some(ext => 
+          file.toLowerCase().endsWith(ext)
+        )
+      );
+      
+      const tsFiles = files.filter(file => 
+        file.toLowerCase().endsWith('.ts')
+      );
+
+      console.log(`Found ${videoFiles.length} video files and ${tsFiles.length} TS files in ${this.videoDir}`);
+      console.log(`📦 Existing thumbnails to restore: ${this.existingThumbnails.size}`);
+      
+      // ビデオリストをクリア
+      this.videos.clear();
+      
+      // ビデオメタデータの生成（並列処理なし）
+      for (const file of videoFiles) {
+        try {
+          const videoPath = path.join(this.videoDir, file);
+          const stats = fs.statSync(videoPath);
+          const videoId = path.parse(file).name;
+          
+          const metadata: VideoMetadata = {
+            id: videoId,
+            filename: file,
+            originalName: file,
+            path: videoPath,
+            size: stats.size,
+            mimetype: this.getMimeType(file),
+            uploadDate: stats.mtime,
+            createdAt: stats.mtime,
+            updatedAt: stats.mtime,
+            thumbnailPath: undefined
+          };
+
+          // 既存のサムネイル情報を復元
+          console.log(`🔍 Checking thumbnail restoration for ${videoId} (file: ${file})`);
+          console.log(`📋 Available backup keys: ${Array.from(this.existingThumbnails.keys()).join(', ')}`);
+          
+          // バックアップから復元を試行
+          if (this.existingThumbnails.has(videoId)) {
+            const thumbnailPath = this.existingThumbnails.get(videoId);
+            console.log(`📋 Found existing thumbnail path: ${thumbnailPath}`);
+            // サムネイルファイルが実際に存在するかチェック
+            if (thumbnailPath && fs.existsSync(thumbnailPath)) {
+              metadata.thumbnailPath = thumbnailPath;
+              console.log(`🔄 Restored thumbnail for ${file}: ${thumbnailPath}`);
+            } else {
+              console.log(`❌ Thumbnail file does not exist: ${thumbnailPath}`);
+            }
+          } else {
+            // バックアップがない場合、デフォルトパスで直接チェック
+            const defaultThumbnailPath = path.join(__dirname, '../storage/thumbnails', `${videoId}_thumbnail.png`);
+            if (fs.existsSync(defaultThumbnailPath)) {
+              metadata.thumbnailPath = defaultThumbnailPath;
+              console.log(`🔍 Found thumbnail at default location for ${file}: ${defaultThumbnailPath}`);
+              // 見つかったサムネイルをバックアップに追加
+              this.existingThumbnails.set(videoId, defaultThumbnailPath);
+            } else {
+              console.log(`🆕 No existing thumbnail found for ${videoId}, will generate new one`);
+            }
+          }
+
+          this.videos.set(videoId, metadata);
+          console.log(`Loaded video metadata: ${file}`);
+        } catch (error) {
+          console.error(`Error loading video ${file}:`, error);
+        }
+      }
+
+      // TSファイルのメタデータ生成
+      for (const tsFile of tsFiles) {
+        try {
+          // 同名のMP4ファイルが存在するかチェック
+          const baseName = path.basename(tsFile, '.ts');
+          const mp4Exists = videoFiles.some(videoFile => 
+            path.basename(videoFile, path.extname(videoFile)) === baseName
+          );
+
+          if (!mp4Exists) {
+            const tsPath = path.join(this.videoDir, tsFile);
+            const stats = fs.statSync(tsPath);
+            const videoId = this.generateVideoId(tsFile);
+
+            const metadata: VideoMetadata = {
+              id: videoId,
+              filename: tsFile,
+              originalName: tsFile,
+              path: tsPath,
+              size: stats.size,
+              mimetype: 'video/mp2t',
+              thumbnailPath: '', // TSロゴサムネイルは後で設定
+              uploadDate: stats.mtime,
+              createdAt: stats.mtime,
+              updatedAt: stats.mtime,
+              timestamp: stats.mtime.toISOString(),
+              playCount: 0,
+              isFavorite: false,
+              isTranscoding: false,
+              isTs: true // TSファイルフラグ
+            };
+
+            this.videos.set(videoId, metadata);
+            console.log(`Loaded TS file metadata: ${tsFile}`);
+          } else {
+            console.log(`Skipping TS file ${tsFile} - MP4 version exists`);
+          }
+        } catch (error) {
+          console.error(`Error loading TS file ${tsFile}:`, error);
+        }
+      }
+
+      console.log(`📊 Loaded ${this.videos.size} video metadata entries`);
+    } catch (error) {
+      console.error('Error loading video metadata:', error);
+    }
+  }
+
+  // バックグラウンドでサムネイル生成を実行
+  private async generateThumbnailsInBackground(): Promise<void> {
+    // 既に生成中の場合は重複実行を防ぐ
+    if (this.isGeneratingThumbnails) {
+      console.log('🛑 Thumbnail generation already in progress, skipping duplicate execution');
+      return;
+    }
+
+    try {
+      // ロックを設定
+      this.isGeneratingThumbnails = true;
+      
+      const videoMetadatas = Array.from(this.videos.values());
+      const nonTsVideos = videoMetadatas.filter(video => !video.path.toLowerCase().endsWith('.ts'));
+      
+      if (nonTsVideos.length === 0) {
+        console.log('No videos require thumbnail generation');
+        return;
+      }
+
+      // 既にサムネイルが存在するかチェックして、生成が必要なビデオのみをフィルタリング
+      const videosNeedingThumbnails = nonTsVideos.filter(video => {
+        if (!video.thumbnailPath) return true;
+        
+        const thumbnailExists = fs.existsSync(video.thumbnailPath);
+        if (thumbnailExists) {
+          console.log(`⏭️ Thumbnail already exists: ${video.originalName}`);
+          return false;
+        }
+        return true;
+      });
+
+      if (videosNeedingThumbnails.length === 0) {
+        console.log('🎉 All videos already have thumbnails, no generation needed');
+        // プログレス状態を完了状態に設定
+        this.backgroundThumbnailProgress = {
+          isGenerating: false,
+          total: nonTsVideos.length,
+          completed: nonTsVideos.length,
+          currentVideo: undefined
+        };
+        return;
+      }
+
+      // プログレス状態を更新
+      this.backgroundThumbnailProgress = {
+        isGenerating: true,
+        total: nonTsVideos.length,
+        completed: nonTsVideos.length - videosNeedingThumbnails.length, // 既存のサムネイル数
+        currentVideo: undefined
+      };
+
+      console.log(`🚀 Starting background thumbnail generation for ${videosNeedingThumbnails.length} videos (${this.backgroundThumbnailProgress.completed} already exist)`);
+      
+      // サムネイル生成が必要な動画のみを対象とする
+      const thumbnailJobs = videosNeedingThumbnails.map(video => ({
+        videoPath: video.path,
+        videoId: video.id
+      }));
+
+      // 進行状況を追跡できるように順次実行に変更
+      let completedCount = this.backgroundThumbnailProgress.completed; // 既存のサムネイル数から開始
+      const successfulPaths: string[] = [];
+      const failedJobs: { videoId: string; error: string }[] = [];
+
+      for (const job of thumbnailJobs) {
+        this.backgroundThumbnailProgress.currentVideo = this.videos.get(job.videoId)?.originalName;
+        
+        try {
+          const thumbnailPath = await this.thumbnailGenerator.generateThumbnail(
+            job.videoPath, 
+            job.videoId
+          );
+          
+          if (thumbnailPath) {
+            successfulPaths.push(thumbnailPath);
+            const video = this.videos.get(job.videoId);
+            if (video) {
+              video.thumbnailPath = thumbnailPath;
+              console.log(`✅ Thumbnail generated: ${video.originalName}`);
+            }
+          }
+        } catch (error) {
+          console.error(`❌ Thumbnail generation failed for ${job.videoId}: ${error}`);
+          failedJobs.push({ videoId: job.videoId, error: String(error) });
+        }
+
+        completedCount++;
+        this.backgroundThumbnailProgress.completed = completedCount;
+      }
+
+            // 完了
+            console.log(`✅ Background thumbnail generation completed! Generated ${successfulPaths.length} new thumbnails`);
+            
+            // プログレス状態を完了状態に更新
+            this.backgroundThumbnailProgress = {
+                isGenerating: false,
+                total: nonTsVideos.length,
+                completed: nonTsVideos.length,
+                currentVideo: undefined
+            };
+            
+            console.log('📊 Final progress state:', this.backgroundThumbnailProgress);      
+            console.log(`🏁 Background thumbnail generation finished: ${successfulPaths.length} successful, ${failedJobs.length} failed`);
+    } catch (error) {
+      console.error('Error in background thumbnail generation:', error);
+      // エラー時もプログレス状態をリセット
+      this.backgroundThumbnailProgress = {
+        isGenerating: false,
+        total: 0,
+        completed: 0,
+        currentVideo: undefined
+      };
+    } finally {
+      // ロックを解除
+      this.isGeneratingThumbnails = false;
+      console.log('🔓 Thumbnail generation lock released');
+    }
+  }
+
+  // サムネイル生成の進行状況を取得
+  getThumbnailGenerationProgress() {
+    // 現在のフォルダでサムネイル生成が進行中でない場合、
+    // 実際の状況を確認してから返す
+    if (!this.backgroundThumbnailProgress.isGenerating) {
+      // 現在のビデオ数とサムネイル数を確認
+      const totalVideos = Array.from(this.videos.values()).filter(v => !v.isTs).length;
+      
+      // 実際にサムネイルファイルが存在するかチェック
+      let videosWithThumbnails = 0;
+      for (const video of this.videos.values()) {
+        if (!video.isTs && video.thumbnailPath && fs.existsSync(video.thumbnailPath)) {
+          videosWithThumbnails++;
+        }
+      }
+      
+      // 実際の状況を反映
+      const progress = {
+        ...this.backgroundThumbnailProgress,
+        total: totalVideos,
+        completed: videosWithThumbnails,
+        active: this.backgroundThumbnailProgress.isGenerating
+      };
+      
+      console.log(`📊 Current progress check: ${videosWithThumbnails}/${totalVideos} thumbnails exist (active: ${progress.active})`);
+      return progress;
+    }
     
-    console.log(`Video directory changed to: ${this.videoDir}`);
-    
-    this.videos.clear();
-    await this.loadVideos();
+    // 生成中の場合はactiveフィールドを追加して返す
+    return { 
+      ...this.backgroundThumbnailProgress,
+      active: this.backgroundThumbnailProgress.isGenerating
+    };
   }
 
   // フォルダ全体のサムネイル生成（高速化版）
@@ -326,8 +603,28 @@ export default class VideoService {
     activeJobs: number;
     thumbnailDir: string;
     gpuCapabilities: any;
+    totalVideos: number;
+    totalThumbnails: number;
   } {
-    return this.thumbnailGenerator.getStats();
+    const baseStats = this.thumbnailGenerator.getStats();
+    
+    // サムネイルファイル数をカウント
+    let thumbnailCount = 0;
+    try {
+      if (fs.existsSync(baseStats.thumbnailDir)) {
+        const thumbnailFiles = fs.readdirSync(baseStats.thumbnailDir)
+          .filter(file => file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg'));
+        thumbnailCount = thumbnailFiles.length;
+      }
+    } catch (error) {
+      console.error('Error counting thumbnails:', error);
+    }
+    
+    return {
+      ...baseStats,
+      totalVideos: this.videos.size,
+      totalThumbnails: thumbnailCount
+    };
   }
 
   // 超高速サムネイル生成
@@ -718,5 +1015,63 @@ export default class VideoService {
       platform: this.thumbnailGenerator.getPlatformInfo(),
       encoder: this.thumbnailGenerator.getOptimalEncoderOptions()
     };
+  }
+
+  // 個別動画のサムネイル生成
+  async generateSingleThumbnail(videoId: string): Promise<{ success: boolean; thumbnailUrl?: string; filePath?: string; message?: string }> {
+    try {
+      const video = this.videos.get(videoId);
+      if (!video) {
+        return {
+          success: false,
+          message: 'Video not found'
+        };
+      }
+
+      console.log(`🎬 Generating thumbnail for: ${video.originalName}`);
+      
+      // ファイルパスの存在確認
+      const videoFilePath = path.join(this.videoDir, video.filename);
+      if (!fs.existsSync(videoFilePath)) {
+        console.error(`❌ Video file not found: ${videoFilePath}`);
+        return {
+          success: false,
+          message: `Video file not found: ${video.filename}`
+        };
+      }
+      
+      const thumbnailPath = await this.thumbnailGenerator.generateThumbnail(
+        videoFilePath, 
+        video.id
+      );
+
+      if (thumbnailPath) {
+        // サムネイル情報をビデオメタデータに更新
+        const thumbnailFilename = path.basename(thumbnailPath);
+        const thumbnailUrl = `/api/thumbnails/${encodeURIComponent(thumbnailFilename)}`;
+        
+        // VideoMetadata型にthumbnailUrlプロパティを追加
+        (video as any).thumbnailUrl = thumbnailUrl;
+
+        console.log(`✅ Thumbnail generated successfully: ${thumbnailUrl}`);
+
+        return {
+          success: true,
+          thumbnailUrl: thumbnailUrl,
+          filePath: thumbnailPath
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Failed to generate thumbnail'
+        };
+      }
+    } catch (error) {
+      console.error(`❌ Error generating thumbnail for ${videoId}:`, error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 }

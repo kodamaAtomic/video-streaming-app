@@ -76,7 +76,9 @@ router.post('/change-folder', videoController.changeVideoFolder.bind(videoContro
 router.post('/thumbnails/batch-generate', videoController.generateThumbnailsBatch.bind(videoController));
 router.post('/thumbnails/ultra-fast', videoController.generateThumbnailsUltraFast.bind(videoController));
 router.post('/thumbnails/progressive', videoController.generateThumbnailsProgressive.bind(videoController));
+router.post('/thumbnails/generate/:id', videoController.generateSingleThumbnail.bind(videoController));
 router.get('/thumbnails/stats', videoController.getThumbnailStats.bind(videoController));
+router.get('/thumbnails/progress', videoController.getThumbnailProgress.bind(videoController));
 
 // 並列サムネイル生成エンドポイント
 router.post('/thumbnails/batch-generate', videoController.generateThumbnailsBatch.bind(videoController));
@@ -89,6 +91,9 @@ router.delete('/transcode/cancel/:jobId', videoController.cancelTranscode.bind(v
 
 // システム情報取得
 router.get('/system-info', videoController.getSystemInfo.bind(videoController));
+
+// デバッグ情報取得
+router.get('/debug-info', videoController.getDebugInfo.bind(videoController));
 
 // 個別ビデオルート（最後に配置）
 router.get('/:id', videoController.getVideoById.bind(videoController));

@@ -115,6 +115,20 @@
         <!-- サムネイルグリッド -->
         <div id="thumbnail-section">
             <h2>ビデオ一覧</h2>
+            
+            <!-- サムネイル生成プログレスバー -->
+            <div id="thumbnail-progress-container" class="progress-container" style="display: none;">
+                <div class="progress-info">
+                    <span id="progress-text">サムネイルを生成中...</span>
+                    <span id="progress-current">0</span>/<span id="progress-total">0</span>
+                    <span id="bulk-progress-percentage">0%</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="bulk-progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="progress-details" class="progress-details"></div>
+            </div>
+            
             <div id="thumbnail-grid" class="grid-24">
                 <p>ロード中...</p>
             </div>

@@ -647,6 +647,17 @@ export class ThumbnailGenerator {
   }
 
   // 動画メタデータを取得してアスペクト比を計算
+  // ファイル名の安全化（特殊文字をエスケープ）
+  private sanitizeFilename(filename: string): string {
+    return filename
+      .replace(/[<>:"/\\|?*]/g, '_')  // Windows禁止文字を_に置換
+      .replace(/[\s\u3000]+/g, '_')   // スペースと全角スペースを_に置換
+      .replace(/[^\w\-_.()[\]{}ぁ-んァ-ヶ一-龯０-９]/g, '_')  // 日本語文字を許可
+      .replace(/_+/g, '_')            // 連続する_を1つに
+      .replace(/^_|_$/g, '')          // 先頭・末尾の_を除去
+      .substring(0, 200);             // 最大長制限
+  }
+
   private async getVideoMetadata(videoPath: string): Promise<{
     width: number;
     height: number;
@@ -736,9 +747,12 @@ export class ThumbnailGenerator {
     videoId: string,
     options: ThumbnailOptions = {}
   ): Promise<string> {
+    // 安全なファイル名を生成（特殊文字をエスケープ）
+    const safeVideoId = this.sanitizeFilename(videoId);
+    
     const {
       timemarks = ['25%'],
-      filename = `${videoId}_thumbnail.png`
+      filename = `${safeVideoId}_thumbnail.png`
     } = options;
 
     const thumbnailPath = path.join(this.thumbnailDir, filename);

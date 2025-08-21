@@ -21,7 +21,23 @@ export default class VideoController {
 
   async getAllVideos(req: Request, res: Response): Promise<void> {
     try {
+      console.log('🔍 getAllVideos called - starting video fetch');
+      
       const videos = await this.videoService.getAllVideos();
+      console.log(`📊 VideoService returned ${videos.length} videos`);
+      
+      // ビデオが1つも見つからない場合の処理
+      if (videos.length === 0) {
+        console.log('📁 No videos found, returning empty response');
+        res.json({
+          success: true,
+          data: [],
+          message: 'No videos found. Please select a video folder first.'
+        });
+        return;
+      }
+      
+      console.log('🔄 Processing video thumbnails...');
       
       // サムネイル情報を含めてレスポンス
       const videosWithThumbnails = videos.map(video => {
@@ -34,7 +50,7 @@ export default class VideoController {
           thumbnailUrl = '/assets/ts-logo.svg';
         } else {
           thumbnailUrl = video.thumbnailPath ? 
-            `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null;
+            `/api/thumbnails/${encodeURIComponent(path.basename(video.thumbnailPath))}` : null;
         }
         
         console.log(`Generated thumbnail URL: ${thumbnailUrl}`);
@@ -55,12 +71,14 @@ export default class VideoController {
         };
       });
 
+      console.log('✅ getAllVideos completed successfully, sending response');
       res.json({
         success: true,
         data: videosWithThumbnails
       });
     } catch (error) {
-      console.error('Error fetching videos:', error);
+      console.error('❌ Error in getAllVideos:', error);
+      console.error('❌ Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       res.status(500).json({
         success: false,
         message: 'Failed to fetch videos',
@@ -112,7 +130,7 @@ export default class VideoController {
       const videoWithThumbnail = {
         ...video,
         thumbnailUrl: video.thumbnailPath ? 
-          `/api/thumbnails/${path.basename(video.thumbnailPath)}` : null
+          `/api/thumbnails/${encodeURIComponent(path.basename(video.thumbnailPath))}` : null
       };
 
       res.json({
@@ -132,12 +150,28 @@ export default class VideoController {
   async streamVideo(req: Request, res: Response): Promise<void> {
     try {
       const { id } = req.params;
+      console.log(`🎬 Streaming video request for ID: ${id}`);
+      
       const video = await this.videoService.getVideoById(id);
 
       if (!video) {
+        console.log(`❌ Video not found for ID: ${id}`);
         res.status(404).json({
           success: false,
           message: 'Video not found'
+        });
+        return;
+      }
+
+      console.log(`📹 Streaming video: ${video.originalName}`);
+      console.log(`📂 Video path: ${video.path}`);
+
+      // ファイルの存在確認
+      if (!fs.existsSync(video.path)) {
+        console.log(`❌ Video file not found at path: ${video.path}`);
+        res.status(404).json({
+          success: false,
+          message: 'Video file not found on disk'
         });
         return;
       }
@@ -146,11 +180,17 @@ export default class VideoController {
       const fileSize = stat.size;
       const range = req.headers.range;
 
+      console.log(`📊 File size: ${fileSize} bytes`);
+      console.log(`🌐 Range header: ${range || 'none'}`);
+
       if (range) {
         const parts = range.replace(/bytes=/, "").split("-");
         const start = parseInt(parts[0], 10);
         const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
         const chunksize = (end - start) + 1;
+        
+        console.log(`📋 Streaming range: ${start}-${end}/${fileSize} (${chunksize} bytes)`);
+        
         const file = fs.createReadStream(video.path, { start, end });
         const head = {
           'Content-Range': `bytes ${start}-${end}/${fileSize}`,
@@ -161,6 +201,7 @@ export default class VideoController {
         res.writeHead(206, head);
         file.pipe(res);
       } else {
+        console.log(`📋 Streaming full file: ${fileSize} bytes`);
         const head = {
           'Content-Length': fileSize,
           'Content-Type': 'video/mp4',
@@ -169,7 +210,7 @@ export default class VideoController {
         fs.createReadStream(video.path).pipe(res);
       }
     } catch (error) {
-      console.error('Error streaming video:', error);
+      console.error('❌ Error streaming video:', error);
       res.status(500).json({
         success: false,
         message: 'Failed to stream video',
@@ -377,6 +418,30 @@ export default class VideoController {
       res.status(500).json(response);
     }
   }
+
+      // サムネイル生成プログレスを取得
+    getThumbnailProgress = async (req: Request, res: Response) => {
+        try {
+            const progress = this.videoService.getThumbnailGenerationProgress();
+            
+            // フロントエンド互換性のためactiveフィールドを追加
+            const responseData = {
+                ...progress,
+                active: progress.isGenerating
+            };
+            
+            res.json({
+                success: true,
+                data: responseData
+            });
+        } catch (error) {
+            console.error('❌ Error getting thumbnail progress:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to get thumbnail progress'
+            });
+        }
+    };
 
   // ===== 登録フォルダ管理 =====
   
@@ -648,6 +713,49 @@ export default class VideoController {
     }
   }
 
+  // 個別動画のサムネイル生成
+  async generateSingleThumbnail(req: Request, res: Response): Promise<void> {
+    try {
+      const { id } = req.params;
+      
+      if (!id) {
+        res.status(400).json({
+          success: false,
+          message: 'Video ID is required'
+        });
+        return;
+      }
+
+      console.log(`🎬 Generating thumbnail for video ID: ${id}`);
+      
+      const result = await this.videoService.generateSingleThumbnail(id);
+      
+      if (result.success) {
+        res.json({
+          success: true,
+          message: 'Thumbnail generated successfully',
+          data: {
+            videoId: id,
+            thumbnailUrl: result.thumbnailUrl,
+            filePath: result.filePath
+          }
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          message: result.message || 'Failed to generate thumbnail'
+        });
+      }
+    } catch (error) {
+      console.error('Error generating single thumbnail:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to generate thumbnail',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
   // システム情報（GPU・プラットフォーム・エンコーダー）の取得
   async getSystemInfo(req: Request, res: Response): Promise<void> {
     try {
@@ -669,6 +777,45 @@ export default class VideoController {
       res.status(500).json({
         success: false,
         message: 'Failed to get system information',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // デバッグ情報（現在のフォルダ等）の取得
+  async getDebugInfo(req: Request, res: Response): Promise<void> {
+    try {
+      console.log('🔍 Getting debug information...');
+      
+      const videosDir = path.join(__dirname, '../storage/videos');
+      const thumbnailsDir = path.join(__dirname, '../storage/thumbnails');
+      
+      const result = {
+        success: true,
+        data: {
+          currentFolder: this.videoService.videoDirectory,
+          directories: {
+            videos: {
+              path: videosDir,
+              exists: fs.existsSync(videosDir),
+              files: fs.existsSync(videosDir) ? fs.readdirSync(videosDir) : []
+            },
+            thumbnails: {
+              path: thumbnailsDir,
+              exists: fs.existsSync(thumbnailsDir),
+              files: fs.existsSync(thumbnailsDir) ? fs.readdirSync(thumbnailsDir) : []
+            }
+          }
+        }
+      };
+      
+      console.log('📁 Current video directory from VideoService:', this.videoService.videoDirectory);
+      res.json(result);
+    } catch (error) {
+      console.error('Error getting debug information:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to get debug information',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }

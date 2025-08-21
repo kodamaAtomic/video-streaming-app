@@ -85,26 +85,10 @@ app.get('/api/debug/ffmpeg-info', async (req, res) => {
   }
 });
 
+// 廃止: /api/debug/files はVideoControllerの /api/videos/debug-info に移行
+// 後方互換性のためのリダイレクト
 app.get('/api/debug/files', (req, res) => {
-  const videosDir = path.join(__dirname, '../storage/videos');
-  const thumbnailsDir = path.join(__dirname, '../storage/thumbnails');
-  
-  const result = {
-    directories: {
-      videos: {
-        path: videosDir,
-        exists: fs.existsSync(videosDir),
-        files: fs.existsSync(videosDir) ? fs.readdirSync(videosDir) : []
-      },
-      thumbnails: {
-        path: thumbnailsDir,
-        exists: fs.existsSync(thumbnailsDir),
-        files: fs.existsSync(thumbnailsDir) ? fs.readdirSync(thumbnailsDir) : []
-      }
-    }
-  };
-  
-  res.json(result);
+  res.redirect('/api/videos/debug-info');
 });
 
 // API ルートの登録（1回のみ）

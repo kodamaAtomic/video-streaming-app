@@ -4,11 +4,33 @@ import fs from 'fs';
 
 const router = Router();
 
-router.get('/:filename', (req, res) => {
+router.get('/:filename(*)', (req, res) => {
   const { filename } = req.params;
-  const thumbnailPath = path.join(__dirname, '../../storage/thumbnails', filename);
+  // URLデコードを明示的に実行
+  const decodedFilename = decodeURIComponent(filename);
+  
+  // セキュリティ: パストラバーサル攻撃を防ぐ（全角文字は許可）
+  if (decodedFilename.includes('..') || decodedFilename.includes('\\') || decodedFilename.includes('\0')) {
+    console.log(`🚫 Invalid filename detected: ${decodedFilename}`);
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid filename'
+    });
+  }
+  
+  // 半角スラッシュのみ禁止（全角「／」は許可）
+  if (decodedFilename.includes('/')) {
+    console.log(`🚫 Invalid filename with path separator: ${decodedFilename}`);
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid filename with path separator'
+    });
+  }
+  
+  const thumbnailPath = path.join(__dirname, '../../storage/thumbnails', decodedFilename);
   
   console.log(`🖼️ Thumbnail requested: ${filename}`);
+  console.log(`🔄 Decoded filename: ${decodedFilename}`);
   console.log(`📍 Thumbnail path: ${thumbnailPath}`);
   console.log(`✅ Path exists: ${fs.existsSync(thumbnailPath)}`);
   

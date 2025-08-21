@@ -51,7 +51,7 @@ const VideoApp = {
     },
     
     // 初期化
-    init() {
+    async init() {
         console.log('🚀 VideoApp initializing...');
         this.elements.thumbnailGrid = document.getElementById('thumbnail-grid');
         this.elements.videoPlayer = document.getElementById('video-player');
@@ -66,17 +66,24 @@ const VideoApp = {
         // イベントリスナーの設定
         this.setupEventListeners();
         
-        // 初期データ読み込み
-        this.fetchThumbnails();
-        
-        // 登録フォルダUI初期化
-        this.initRegisteredFoldersUI();
-        
         // 再生回数データの読み込み
         this.loadPlayCountData();
         
         // Favoriteデータの読み込み
         this.loadFavoriteData();
+        
+        // 登録フォルダUI初期化
+        this.initRegisteredFoldersUI();
+        
+        // 初期データ読み込み（最後に実行）
+        try {
+            console.log('🔍 Starting initial data fetch...');
+            await this.fetchThumbnails();
+            console.log('✅ Initial data fetch completed');
+        } catch (error) {
+            console.error('❌ Initial data fetch failed:', error);
+            this.elements.thumbnailGrid.innerHTML = '<p>初期データの読み込みに失敗しました。フォルダを選択してください。</p>';
+        }
     },
     
     // DOM要素の存在確認
@@ -398,38 +405,125 @@ const VideoApp = {
             console.log('🔍 Fetching thumbnails...');
             
             const response = await fetch('/api/videos');
+            console.log('🔍 Response received:', response.status, response.statusText);
             
             if (!response.ok) {
+                // フォルダが選択されていない場合の404エラーを特別に処理
+                if (response.status === 404) {
+                    console.log('📁 No folder selected - showing initial message');
+                    this.elements.thumbnailGrid.innerHTML = '<p>動画フォルダを選択してください。</p>';
+                    return;
+                }
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
             const result = await response.json();
             console.log('📋 API Response:', result);
             
-            if (result.success && result.data) {
-                // TSファイルも含めて表示するため、thumbnailUrlがあるかTSファイルかを確認
+            if (result.success) {
+                // データが空の場合
+                if (!result.data || result.data.length === 0) {
+                    console.log('📁 No videos found in current folder');
+                    this.elements.thumbnailGrid.innerHTML = '<p>現在のフォルダに動画ファイルがありません。</p>';
+                    // currentVideosも空にリセット
+                    this.currentVideos = [];
+                    this.filteredVideos = [];
+                    return;
+                }
+                
+                // すべてのビデオを currentVideos に保存（サムネイル生成チェック用）
+                this.currentVideos = result.data;
+                console.log('🔍 All videos loaded:', this.currentVideos.length);
+                
+                // 表示用にはサムネイルがあるものまたはTSファイルのみフィルタ
                 const videosWithThumbnails = result.data.filter(video => video.thumbnailUrl || video.isTs);
-                this.currentVideos = videosWithThumbnails;
+                console.log('🔍 Videos with thumbnails for display:', videosWithThumbnails.length);
                 
                 // 現在のフォルダ情報を取得して再生回数データを設定
                 await this.updateCurrentFolderInfo();
-                
+
                 // 新機能: フィルタされた動画リストをリセット
                 this.filteredVideos = [];
                 
-                // ソートとフィルタを適用
-                this.applySortAndFilter();
+                // フォルダ変更直後の場合：サムネイルがない場合でも全ての動画を一時表示
+                if (videosWithThumbnails.length === 0 && result.data.length > 0) {
+                    console.log('🔍 No thumbnails found, displaying all videos temporarily for folder change');
+                    console.log('🔍 Displaying all videos because no thumbnails found:', result.data.length);
+                    this.applySortAndFilterWithVideos(result.data);
+                } else if (videosWithThumbnails.length > 0) {
+                    console.log('🔍 Displaying videos with thumbnails:', videosWithThumbnails.length);
+                    // ソートとフィルタを適用（表示用のビデオのみ）
+                    this.applySortAndFilterWithVideos(videosWithThumbnails);
+                } else {
+                    console.log('🔍 No videos to display at all');
+                    this.elements.thumbnailGrid.innerHTML = '<p>表示する動画がありません。</p>';
+                }
             } else {
+                console.log('❌ API response indicates failure:', result);
                 this.elements.thumbnailGrid.innerHTML = '<p>ビデオの取得に失敗しました。</p>';
             }
         } catch (error) {
             console.error('❌ Error fetching thumbnails:', error);
-            this.elements.thumbnailGrid.innerHTML = '<p>エラーが発生しました。</p>';
+            console.error('❌ Error stack:', error.stack);
+            
+            // ネットワークエラーかサーバーエラーかを判定
+            if (error.message.includes('Failed to fetch')) {
+                this.elements.thumbnailGrid.innerHTML = '<p>サーバーに接続できません。サーバーが起動しているか確認してください。</p>';
+            } else {
+                this.elements.thumbnailGrid.innerHTML = '<p>動画フォルダを選択してください。</p>';
+            }
+        }
+    },
+    
+    // フォルダ変更後に全てのビデオをロードしてからサムネイル生成をチェック
+    async fetchAllVideosAndCheckGeneration() {
+        console.log('🔍 fetchAllVideosAndCheckGeneration called');
+        
+        try {
+            // まず全ての動画を取得して表示
+            const response = await fetch('/api/videos');
+            const result = await response.json();
+            
+            if (result && result.success && Array.isArray(result.data)) {
+                console.log(`✅ Loaded ${result.data.length} videos for display`);
+                
+                // 全ての動画を即座に表示（サムネイルなしでも）
+                this.currentVideos = result.data;
+                this.applySortAndFilterWithVideos(result.data);
+                
+                // サムネイルの生成状況をチェック（TSファイルを除く通常の動画で、かつサムネイルがないもの）
+                const videosWithoutThumbnails = result.data.filter(video => 
+                    !video.isTs && !video.thumbnailUrl
+                );
+                
+                console.log(`🔍 Found ${videosWithoutThumbnails.length} videos without thumbnails (excluding TS files)`);
+                
+                if (videosWithoutThumbnails.length > 0) {
+                    // プログレスバーを表示
+                    this.showProgressBar();
+                    this.updateProgressBar(0, `${videosWithoutThumbnails.length}個のサムネイルを生成中...`);
+                    
+                    // サムネイル生成を開始
+                    this.startThumbnailGenerationWithProgress(videosWithoutThumbnails);
+                } else {
+                    console.log('✅ All videos already have thumbnails or are TS files');
+                    // プログレスバーが表示されている場合は非表示にする
+                    this.hideProgressBar();
+                }
+            } else {
+                console.log('❌ API response indicates failure:', result);
+                this.elements.thumbnailGrid.innerHTML = '<p>ビデオの取得に失敗しました。</p>';
+            }
+        } catch (error) {
+            console.error('❌ Error fetching videos for generation check:', error);
+            this.elements.thumbnailGrid.innerHTML = '<p>動画フォルダを選択してください。</p>';
         }
     },
     
     // サムネイル表示
     displayThumbnails(videos) {
+        console.log('🎬 displayThumbnails called with:', videos ? videos.length : 0, 'videos');
+        
         if (!this.elements.thumbnailGrid) {
             console.error('❌ thumbnail-grid element not found!');
             return;
@@ -468,20 +562,41 @@ const VideoApp = {
         const imageContainer = document.createElement('div');
         imageContainer.className = 'thumbnail-image-container';
         
-        // 画像要素
-        const img = document.createElement('img');
-        
-        // TSファイルの場合は専用ロゴを表示
-        if (video.isTs) {
-            img.src = '/assets/ts-logo.svg';
-            img.alt = 'TS Video File';
-            thumbnailElement.classList.add('ts-file');
+        // サムネイル画像または生成中プレースホルダー
+        if (!video.thumbnailUrl && !video.isTs) {
+            // サムネイルなしの場合は通常のプレースホルダーを表示（自動生成なし）
+            this.createThumbnailPlaceholder(imageContainer, video);
         } else {
-            img.src = video.thumbnailUrl;
-            img.alt = video.title || video.originalName;
+            // 画像要素を作成
+            const img = document.createElement('img');
+            
+            // TSファイルの場合は専用ロゴを表示
+            if (video.isTs) {
+                img.src = '/assets/ts-logo.svg';
+                img.alt = 'TS Video File';
+                thumbnailElement.classList.add('ts-file');
+            } else {
+                img.src = video.thumbnailUrl;
+                img.alt = video.title || video.originalName;
+            }
+            
+            img.style.display = 'block';
+            
+            // 画像ロードイベント
+            img.onload = () => {
+                console.log(`✅ Thumbnail loaded: ${video.thumbnailUrl}`);
+            };
+            
+            img.onerror = () => {
+                console.error(`❌ Failed to load thumbnail: ${video.thumbnailUrl}`);
+                const placeholder = document.createElement('div');
+                placeholder.className = 'thumbnail-placeholder';
+                placeholder.textContent = 'サムネイル読み込み失敗';
+                imageContainer.replaceChild(placeholder, img);
+            };
+            
+            imageContainer.appendChild(img);
         }
-        
-        img.style.display = 'block';
         
         // 再生回数オーバーレイ
         const playCountOverlay = document.createElement('div');
@@ -503,6 +618,10 @@ const VideoApp = {
             this.toggleFavorite(video.id);
         });
         
+        // オーバーレイを画像コンテナに追加
+        imageContainer.appendChild(playCountOverlay);
+        imageContainer.appendChild(favoriteOverlay);
+        
         // サムネイル要素にdata-video-id属性を追加
         thumbnailElement.setAttribute('data-video-id', video.id);
         
@@ -510,23 +629,7 @@ const VideoApp = {
         const title = document.createElement('p');
         title.textContent = video.title || video.originalName;
         
-        // 画像ロードイベント
-        img.onload = () => {
-            console.log(`✅ Thumbnail loaded: ${video.thumbnailUrl}`);
-        };
-        
-        img.onerror = () => {
-            console.error(`❌ Failed to load thumbnail: ${video.thumbnailUrl}`);
-            const placeholder = document.createElement('div');
-            placeholder.className = 'thumbnail-placeholder';
-            placeholder.textContent = 'サムネイル読み込み失敗';
-            imageContainer.replaceChild(placeholder, img);
-        };
-        
         // 要素組み立て
-        imageContainer.appendChild(img);
-        imageContainer.appendChild(playCountOverlay);
-        imageContainer.appendChild(favoriteOverlay);
         thumbnailElement.appendChild(imageContainer);
         thumbnailElement.appendChild(title);
         
@@ -539,15 +642,601 @@ const VideoApp = {
             if (video.isTs && !video.isTranscoding) {
                 // TSファイルの場合はトランスコード確認ダイアログを表示
                 window.showTranscodeDialog(video);
-            } else if (!video.isTs) {
-                // 通常のビデオファイルの場合は再生
+            } else if (!video.isTs && video.thumbnailUrl) {
+                // 通常のビデオファイルで、かつサムネイルが存在する場合は再生
                 this.incrementPlayCount(video.id);
                 this.openVideoPlayer(video);
             }
-            // トランスコード中の場合は何もしない
+            // サムネイルなし or トランスコード中の場合は何もしない
         });
         
         this.elements.thumbnailGrid.appendChild(thumbnailElement);
+    },
+    
+    // サムネイル生成中のプレースホルダーを作成
+    createThumbnailGeneratingPlaceholder(imageContainer, video) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'thumbnail-generating-placeholder';
+        placeholder.style.cssText = `
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #2c2c2c, #404040);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 14px;
+            text-align: center;
+            border-radius: 4px;
+            position: relative;
+        `;
+        
+        // 生成中アイコンとテキスト
+        const iconElement = document.createElement('div');
+        iconElement.style.cssText = `
+            font-size: 24px;
+            margin-bottom: 8px;
+            animation: spin 2s linear infinite;
+        `;
+        iconElement.textContent = '⚙️';
+        
+        const textElement = document.createElement('div');
+        textElement.style.cssText = `
+            font-size: 12px;
+            color: #cccccc;
+            margin-bottom: 10px;
+        `;
+        textElement.textContent = 'サムネイル生成中...';
+        
+        // プログレスバー
+        const progressBar = document.createElement('div');
+        progressBar.className = 'thumbnail-progress-bar';
+        progressBar.style.cssText = `
+            width: 80%;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        `;
+        
+        const progressFill = document.createElement('div');
+        progressFill.className = 'thumbnail-progress-fill';
+        progressFill.style.cssText = `
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            border-radius: 2px;
+            transition: width 0.3s ease;
+            animation: indeterminate 2s ease-in-out infinite;
+        `;
+        
+        progressBar.appendChild(progressFill);
+        
+        placeholder.appendChild(iconElement);
+        placeholder.appendChild(textElement);
+        placeholder.appendChild(progressBar);
+        
+        imageContainer.appendChild(placeholder);
+        
+        // CSS アニメーションを追加
+        if (!document.getElementById('thumbnail-progress-styles')) {
+            const style = document.createElement('style');
+            style.id = 'thumbnail-progress-styles';
+            style.textContent = `
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+                
+                @keyframes indeterminate {
+                    0% { transform: translateX(-100%); width: 30%; }
+                    50% { transform: translateX(0%); width: 60%; }
+                    100% { transform: translateX(100%); width: 30%; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // サムネイル生成を自動開始（少し遅延してから）
+        setTimeout(() => this.startThumbnailGeneration(video), 500);
+    },
+    
+    // 個別動画のサムネイル生成を開始
+    async startThumbnailGeneration(video) {
+        try {
+            console.log(`🎬 Starting thumbnail generation for: ${video.title || video.originalName}`);
+            
+            // 個別サムネイル生成APIを呼び出し
+            const response = await fetch(`/api/videos/thumbnails/generate/${video.id}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                console.log(`✅ Thumbnail generated successfully for: ${video.title || video.originalName}`);
+                
+                // サムネイル生成成功時は該当要素を更新
+                this.updateThumbnailAfterGeneration(video.id, result.data.thumbnailUrl);
+            } else {
+                console.error(`❌ Thumbnail generation failed for: ${video.title || video.originalName}`, result.message);
+                this.updateThumbnailGenerationFailed(video.id, result.message);
+            }
+        } catch (error) {
+            console.error(`❌ Error generating thumbnail for: ${video.title || video.originalName}`, error);
+            this.updateThumbnailGenerationFailed(video.id, error.message);
+        }
+    },
+    
+    // サムネイル生成完了時の更新処理
+    updateThumbnailAfterGeneration(videoId, thumbnailUrl) {
+        const thumbnailElement = document.querySelector(`[data-video-id="${videoId}"]`);
+        if (!thumbnailElement) {
+            console.warn(`⚠️ Thumbnail element not found for video ID: ${videoId}`);
+            return;
+        }
+        
+        const imageContainer = thumbnailElement.querySelector('.thumbnail-image-container');
+        if (!imageContainer) {
+            console.warn(`⚠️ Image container not found for video ID: ${videoId}`);
+            return;
+        }
+        
+        // プレースホルダーを削除
+        const placeholder = imageContainer.querySelector('.thumbnail-generating-placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        // 新しい画像要素を作成
+        const img = document.createElement('img');
+        img.src = thumbnailUrl;
+        img.alt = 'Generated Thumbnail';
+        img.style.display = 'block';
+        
+        img.onload = () => {
+            console.log(`✅ New thumbnail loaded for video ID: ${videoId}`);
+        };
+        
+        img.onerror = () => {
+            console.error(`❌ Failed to load generated thumbnail: ${thumbnailUrl}`);
+            this.updateThumbnailGenerationFailed(videoId, 'サムネイル画像の読み込みに失敗');
+        };
+        
+        // 画像をコンテナに追加
+        imageContainer.appendChild(img);
+        
+        // currentVideosのデータも更新
+        const videoIndex = this.currentVideos.findIndex(v => v.id === videoId);
+        if (videoIndex !== -1) {
+            this.currentVideos[videoIndex].thumbnailUrl = thumbnailUrl;
+        }
+        
+        // filteredVideosのデータも更新
+        const filteredIndex = this.filteredVideos.findIndex(v => v.id === videoId);
+        if (filteredIndex !== -1) {
+            this.filteredVideos[filteredIndex].thumbnailUrl = thumbnailUrl;
+        }
+        
+        console.log(`🎉 Thumbnail successfully updated for video ID: ${videoId}`);
+    },
+    
+    // サムネイル生成失敗時の更新処理
+    updateThumbnailGenerationFailed(videoId, errorMessage) {
+        const thumbnailElement = document.querySelector(`[data-video-id="${videoId}"]`);
+        if (!thumbnailElement) {
+            return;
+        }
+        
+        const imageContainer = thumbnailElement.querySelector('.thumbnail-image-container');
+        if (!imageContainer) {
+            return;
+        }
+        
+        // プレースホルダーの内容を変更
+        const placeholder = imageContainer.querySelector('.thumbnail-generating-placeholder');
+        if (placeholder) {
+            placeholder.style.background = 'linear-gradient(135deg, #d32f2f, #f44336)';
+            
+            const iconElement = placeholder.querySelector('div');
+            if (iconElement) {
+                iconElement.textContent = '❌';
+                iconElement.style.animation = 'none';
+            }
+            
+            const textElement = placeholder.querySelectorAll('div')[1];
+            if (textElement) {
+                textElement.textContent = '生成失敗';
+            }
+            
+            const progressBar = placeholder.querySelector('.thumbnail-progress-bar');
+            if (progressBar) {
+                progressBar.remove();
+            }
+            
+            // エラーメッセージを追加
+            const errorElement = document.createElement('div');
+            errorElement.style.cssText = `
+                font-size: 10px;
+                color: #ffcccb;
+                margin-top: 5px;
+                text-align: center;
+            `;
+            errorElement.textContent = errorMessage || 'エラーが発生しました';
+            placeholder.appendChild(errorElement);
+        }
+        
+        console.error(`❌ Thumbnail generation failed for video ID: ${videoId}`, errorMessage);
+    },
+    
+    // サムネイルなしの動画をチェックして一括生成を開始
+    checkAndStartBulkThumbnailGeneration() {
+        console.log('🔍 checkAndStartBulkThumbnailGeneration called');
+        console.log('🔍 Current videos count:', this.currentVideos.length);
+        
+        if (!this.currentVideos || this.currentVideos.length === 0) {
+            console.log('⚠️ No current videos loaded, skipping thumbnail generation check');
+            return;
+        }
+        
+        // サムネイルがない通常の動画ファイル（TSファイルを除く）を検索
+        const videosWithoutThumbnails = this.currentVideos.filter(video => {
+            const hasNoThumbnail = !video.thumbnailUrl;
+            const isNotTs = !video.isTs;
+            console.log(`🔍 Video: ${video.originalName}, hasNoThumbnail: ${hasNoThumbnail}, isNotTs: ${isNotTs}`);
+            return hasNoThumbnail && isNotTs;
+        });
+        
+        console.log(`🔍 Found ${videosWithoutThumbnails.length} videos without thumbnails`);
+        videosWithoutThumbnails.forEach(video => {
+            console.log(`🔍 Video without thumbnail: ${video.originalName}`);
+        });
+        
+        if (videosWithoutThumbnails.length > 0) {
+            console.log('🎬 Starting bulk thumbnail generation...');
+            this.showBulkThumbnailProgress(videosWithoutThumbnails.length);
+            this.startBulkThumbnailGeneration(videosWithoutThumbnails);
+        } else {
+            console.log('✅ All videos already have thumbnails');
+        }
+    },
+
+    // フォルダ変更時：fetchThumbnailsより前にサムネイル生成チェック
+    async checkAndStartBulkThumbnailGenerationBeforeFetch() {
+        console.log('🔍 checkAndStartBulkThumbnailGenerationBeforeFetch called');
+        
+        try {
+            // APIから動画リストを直接取得
+            const response = await fetch('/api/videos');
+            const result = await response.json();
+            
+            if (!result.success || !result.data) {
+                console.log('⚠️ Failed to fetch videos for thumbnail check');
+                return false; // サムネイル生成が不要/失敗
+            }
+            
+            const videos = result.data;
+            console.log(`🔍 Got ${videos.length} videos from API`);
+            
+            // サムネイルがない通常の動画ファイル（TSファイルを除く）を検索
+            const videosWithoutThumbnails = videos.filter(video => {
+                const hasNoThumbnail = !video.thumbnailUrl;
+                const isNotTs = !video.isTs;
+                return hasNoThumbnail && isNotTs;
+            });
+            
+            console.log(`🔍 Found ${videosWithoutThumbnails.length} videos without thumbnails (before fetch)`);
+            
+            if (videosWithoutThumbnails.length > 0) {
+                console.log('🎬 Starting background thumbnail monitoring...');
+                this.showBulkThumbnailProgress(videosWithoutThumbnails.length);
+                
+                // プログレス監視を開始（待機しない）
+                this.startThumbnailProgressMonitoring();
+                return true; // プログレス監視開始
+            } else {
+                console.log('✅ All videos already have thumbnails (before fetch)');
+                return false; // サムネイル生成が不要
+            }
+        } catch (error) {
+            console.error('❌ Error in checkAndStartBulkThumbnailGenerationBeforeFetch:', error);
+            return false;
+        }
+    },
+    
+    // ビデオ一覧ペイン全体にプログレス表示
+    showBulkThumbnailProgress(totalVideos) {
+        // 専用のプログレスコンテナを表示
+        const progressContainer = document.getElementById('thumbnail-progress-container');
+        const progressCurrent = document.getElementById('progress-current');
+        const progressTotal = document.getElementById('progress-total');
+        const progressText = document.getElementById('progress-text');
+        
+        if (progressContainer) {
+            progressContainer.style.display = 'block';
+        }
+        
+        if (progressTotal) {
+            progressTotal.textContent = totalVideos;
+        }
+        
+        if (progressCurrent) {
+            progressCurrent.textContent = '0';
+        }
+        
+        if (progressText) {
+            progressText.textContent = 'サムネイルを生成中...';
+        }
+        
+        // サムネイルグリッドは非表示にする
+        this.elements.thumbnailGrid.style.display = 'none';
+    },
+    
+    // 一括サムネイル生成の実行
+    async startBulkThumbnailGeneration(videos) {
+        let completedCount = 0;
+        const totalCount = videos.length;
+        
+        // 各動画のサムネイルを順次生成
+        for (let i = 0; i < videos.length; i++) {
+            const video = videos[i];
+            
+            try {
+                console.log(`🎬 Generating thumbnail ${i + 1}/${totalCount}: ${video.originalName}`);
+                
+                // 個別サムネイル生成APIを呼び出し
+                const response = await fetch(`/api/videos/thumbnails/generate/${video.id}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    console.log(`✅ Thumbnail generated: ${video.originalName}`);
+                    completedCount++;
+                    
+                    // currentVideosのデータを更新
+                    const videoIndex = this.currentVideos.findIndex(v => v.id === video.id);
+                    if (videoIndex !== -1) {
+                        this.currentVideos[videoIndex].thumbnailUrl = result.data.thumbnailUrl;
+                    }
+                } else {
+                    console.error(`❌ Thumbnail generation failed: ${video.originalName}`, result.message);
+                    completedCount++; // 失敗してもカウントを進める
+                }
+                
+                // プログレス更新
+                this.updateBulkProgress(completedCount, totalCount);
+                
+                // 少し間隔を空ける（サーバー負荷軽減）
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+            } catch (error) {
+                console.error(`❌ Error generating thumbnail for ${video.originalName}:`, error);
+                completedCount++;
+                this.updateBulkProgress(completedCount, totalCount);
+            }
+        }
+        
+        // すべて完了したらサムネイル一覧を再表示
+        console.log('🎉 Bulk thumbnail generation completed');
+        
+        // プログレスコンテナを隠してサムネイルグリッドを再表示
+        const progressContainer = document.getElementById('thumbnail-progress-container');
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
+        
+        this.elements.thumbnailGrid.style.display = 'grid';
+        
+        setTimeout(() => {
+            this.applySortAndFilter(); // 通常のサムネイル一覧を再表示
+        }, 1500);
+    },
+
+    // サムネイル生成を同期的に実行し、完了まで待機
+    async startBulkThumbnailGenerationAndWait(videos) {
+        return new Promise(async (resolve) => {
+            let completedCount = 0;
+            const totalCount = videos.length;
+            
+            // 各動画のサムネイルを順次生成
+            for (let i = 0; i < videos.length; i++) {
+                const video = videos[i];
+                
+                try {
+                    console.log(`🎬 Generating thumbnail ${i + 1}/${totalCount}: ${video.originalName}`);
+                    
+                    // 個別サムネイル生成APIを呼び出し
+                    const response = await fetch(`/api/videos/thumbnails/generate/${video.id}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        console.log(`✅ Thumbnail generated: ${video.originalName}`);
+                        completedCount++;
+                        
+                        // currentVideosのデータを更新
+                        const videoIndex = this.currentVideos.findIndex(v => v.id === video.id);
+                        if (videoIndex !== -1) {
+                            this.currentVideos[videoIndex].thumbnailUrl = result.data.thumbnailUrl;
+                        }
+                    } else {
+                        console.error(`❌ Thumbnail generation failed: ${video.originalName}`, result.message);
+                        completedCount++; // 失敗してもカウントを進める
+                    }
+                    
+                    // プログレス更新
+                    this.updateBulkProgress(completedCount, totalCount);
+                    
+                    // 少し間隔を空ける（サーバー負荷軽減）
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (error) {
+                    console.error(`❌ Error generating thumbnail for ${video.originalName}:`, error);
+                    completedCount++;
+                    this.updateBulkProgress(completedCount, totalCount);
+                }
+            }
+            
+            // すべて完了
+            console.log('🎉 Bulk thumbnail generation completed and waited');
+            resolve();
+        });
+    },
+    
+    // プログレス更新
+    updateBulkProgress(completed, total) {
+        const percentage = Math.round((completed / total) * 100);
+        
+        const currentElement = document.getElementById('progress-current');
+        const fillElement = document.getElementById('bulk-progress-fill');
+        const percentageElement = document.getElementById('bulk-progress-percentage');
+        
+        if (currentElement) currentElement.textContent = completed;
+        if (fillElement) fillElement.style.width = `${percentage}%`;
+        if (percentageElement) percentageElement.textContent = `${percentage}%`;
+        
+        console.log(`📊 Bulk progress: ${completed}/${total} (${percentage}%)`);
+    },
+
+    // 新しいプログレス更新メソッド（バックグラウンド監視用）
+    updateBulkThumbnailProgress(current, total) {
+        console.log(`📊 updateBulkThumbnailProgress: ${current}/${total}`);
+        
+        const progressBar = document.getElementById('bulk-progress-fill');
+        const progressText = document.getElementById('progress-current');
+        const progressPercentage = document.getElementById('bulk-progress-percentage');
+        
+        if (progressBar) {
+            const percentage = total > 0 ? Math.round((current / total) * 100) : 0;
+            progressBar.style.width = `${percentage}%`;
+            
+            if (progressPercentage) {
+                progressPercentage.textContent = `${percentage}%`;
+            }
+        }
+        
+        if (progressText) {
+            progressText.textContent = `${current}`;
+        }
+    },
+
+    // バックグラウンドサムネイル進捗監視を開始
+    startThumbnailProgressMonitoring() {
+        if (this.progressMonitoringInterval) {
+            clearInterval(this.progressMonitoringInterval);
+        }
+
+        console.log('🔄 Starting thumbnail progress monitoring...');
+        
+        this.progressMonitoringInterval = setInterval(async () => {
+            try {
+                console.log('📡 Polling thumbnail progress...');
+                const response = await fetch('/api/videos/thumbnails/progress');
+                const result = await response.json();
+                
+                console.log('📊 Progress response:', result);
+                
+                if (result.success && result.data) {
+                    const progress = result.data;
+                    console.log(`📊 Background progress: ${progress.completed}/${progress.total} (active: ${progress.active})`);
+                    
+                    // プログレスバーを更新
+                    this.updateBulkThumbnailProgress(progress.completed, progress.total);
+                    
+                    // 完了チェック
+                    if (progress.completed >= progress.total && !progress.active) {
+                        console.log('✅ Background thumbnail generation completed!');
+                        this.stopThumbnailProgressMonitoring();
+                        this.hideBulkThumbnailProgress();
+                        
+                        // 動画リストを更新して新しいサムネイルを反映
+                        console.log('🔄 Refreshing video list...');
+                        await this.fetchVideos();
+                    }
+                } else {
+                    console.warn('⚠️ Invalid progress response:', result);
+                }
+            } catch (error) {
+                console.error('❌ Error monitoring thumbnail progress:', error);
+                this.stopThumbnailProgressMonitoring();
+            }
+        }, 1000); // 1秒間隔でポーリング
+    },
+
+    // プログレス監視を停止
+    stopThumbnailProgressMonitoring() {
+        if (this.progressMonitoringInterval) {
+            clearInterval(this.progressMonitoringInterval);
+            this.progressMonitoringInterval = null;
+            console.log('🛑 Stopped thumbnail progress monitoring');
+        }
+    },
+
+    // プログレス表示を非表示にする
+    hideBulkThumbnailProgress() {
+        console.log('🙈 Hiding bulk thumbnail progress');
+        
+        // プログレスコンテナを隠してサムネイルグリッドを再表示
+        const progressContainer = document.getElementById('thumbnail-progress-container');
+        if (progressContainer) {
+            progressContainer.style.display = 'none';
+        }
+        
+        this.elements.thumbnailGrid.style.display = 'grid';
+        
+        this.applySortAndFilter(); // 通常のサムネイル一覧を再表示
+    },
+    
+    // サムネイルなし用の通常プレースホルダーを作成
+    createThumbnailPlaceholder(imageContainer, video) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'thumbnail-placeholder';
+        placeholder.style.cssText = `
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #404040, #606060);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 14px;
+            text-align: center;
+            border-radius: 4px;
+        `;
+        
+        const iconElement = document.createElement('div');
+        iconElement.style.cssText = `
+            font-size: 24px;
+            margin-bottom: 8px;
+        `;
+        iconElement.textContent = '🎬';
+        
+        const textElement = document.createElement('div');
+        textElement.style.cssText = `
+            font-size: 12px;
+            color: #cccccc;
+        `;
+        textElement.textContent = 'サムネイルなし';
+        
+        placeholder.appendChild(iconElement);
+        placeholder.appendChild(textElement);
+        imageContainer.appendChild(placeholder);
     },
     
     // ビデオプレイヤーを開く
@@ -565,7 +1254,10 @@ const VideoApp = {
         }
         
         if (this.elements.videoPlayer) {
-            this.elements.videoPlayer.src = `/api/videos/${video.id}/stream`;
+            // URLエンコードを適用して特殊文字を安全に処理
+            const encodedVideoId = encodeURIComponent(video.id);
+            this.elements.videoPlayer.src = `/api/videos/${encodedVideoId}/stream`;
+            console.log(`🎬 Setting video src: /api/videos/${encodedVideoId}/stream`);
         }
         
         if (this.elements.videoModal) {
@@ -733,6 +1425,12 @@ const VideoApp = {
     // 現在のフォルダ情報を更新
     async updateCurrentFolderInfo() {
         try {
+            // データがない場合は何もしない
+            if (!this.currentVideos || this.currentVideos.length === 0) {
+                console.log('📁 No videos loaded, skipping folder info update');
+                return;
+            }
+            
             // 登録フォルダ一覧を取得して現在のフォルダを特定
             const response = await fetch('/api/videos/folders');
             const result = await response.json();
@@ -764,6 +1462,7 @@ const VideoApp = {
             }
         } catch (error) {
             console.error('❌ Error updating current folder info:', error);
+            // エラーが発生しても続行する（フォルダ情報の更新は必須ではない）
         }
     },
     
@@ -782,67 +1481,84 @@ const VideoApp = {
     },
     
     // ソートとフィルタを適用
-    applySortAndFilter() {
-        console.log(`🔍 Applying sort: ${this.currentSort} (${this.currentSortOrder}), filter: "${this.currentFilter}", tab: ${this.currentTab}`);
+    applySortAndFilterWithVideos(videos) {
+        console.log('🔍 applySortAndFilterWithVideos called with:', videos.length, 'videos');
         
-        let videos = [...this.currentVideos];
+        if (!videos || videos.length === 0) {
+            console.log('⚠️ No videos to display');
+            this.elements.thumbnailGrid.innerHTML = '<p>表示する動画がありません。</p>';
+            return;
+        }
         
-        // タブによるフィルタ適用
+        let sortedVideos = [...videos];
+
+        // ソート条件の適用
+        if (this.currentSort === 'name') {
+            sortedVideos.sort((a, b) => {
+                const aName = a.originalName || a.title || '';
+                const bName = b.originalName || b.title || '';
+                const comparison = aName.localeCompare(bName, 'ja', {numeric: true, sensitivity: 'base'});
+                return this.currentSortOrder === 'asc' ? comparison : -comparison;
+            });
+        } else if (this.currentSort === 'date') {
+            sortedVideos.sort((a, b) => {
+                const aDate = new Date(a.updatedAt || a.createdAt || 0);
+                const bDate = new Date(b.updatedAt || b.createdAt || 0);
+                const comparison = aDate - bDate;
+                return this.currentSortOrder === 'asc' ? comparison : -comparison;
+            });
+        } else if (this.currentSort === 'size') {
+            sortedVideos.sort((a, b) => {
+                const comparison = (a.size || 0) - (b.size || 0);
+                return this.currentSortOrder === 'asc' ? comparison : -comparison;
+            });
+        } else if (this.currentSort === 'duration') {
+            sortedVideos.sort((a, b) => {
+                const comparison = (a.duration || 0) - (b.duration || 0);
+                return this.currentSortOrder === 'asc' ? comparison : -comparison;
+            });
+        } else if (this.currentSort === 'plays') {
+            sortedVideos.sort((a, b) => {
+                const aPlays = this.playCountData[a.id] || 0;
+                const bPlays = this.playCountData[b.id] || 0;
+                const comparison = aPlays - bPlays;
+                return this.currentSortOrder === 'asc' ? comparison : -comparison;
+            });
+        }
+
+        // フィルター条件の適用
+        let filteredVideos = sortedVideos;
+        
+        // Favoriteタブの場合はFavorite動画のみに絞り込み
         if (this.currentTab === 'favorites') {
-            videos = videos.filter(video => this.isFavorite(video.id));
+            filteredVideos = filteredVideos.filter(video => {
+                return this.isFavorite(video.id);
+            });
+            console.log(`🌟 Filtered to favorites: ${filteredVideos.length} videos`);
         }
         
-        // テキストフィルタ適用
+        // テキスト検索フィルター
         if (this.currentFilter.trim()) {
-            try {
-                const regex = new RegExp(this.currentFilter, 'i');
-                videos = videos.filter(video => {
-                    const filename = video.title || video.originalName || '';
-                    return regex.test(filename);
-                });
-            } catch (e) {
-                // 正規表現が無効な場合は通常の文字列検索
-                const filterLower = this.currentFilter.toLowerCase();
-                videos = videos.filter(video => {
-                    const filename = (video.title || video.originalName || '').toLowerCase();
-                    return filename.includes(filterLower);
-                });
-            }
+            const searchLower = this.currentFilter.toLowerCase();
+            filteredVideos = filteredVideos.filter(video => {
+                const name = (video.originalName || video.title || '').toLowerCase();
+                const filename = (video.filename || '').toLowerCase();
+                return name.includes(searchLower) || filename.includes(searchLower);
+            });
         }
+
+        this.filteredVideos = filteredVideos;
+        console.log('🔍 Final filtered videos count:', filteredVideos.length);
         
-        // ソート適用
-        videos.sort((a, b) => {
-            let aValue, bValue;
-            
-            switch (this.currentSort) {
-                case 'name':
-                    aValue = (a.title || a.originalName || '').toLowerCase();
-                    bValue = (b.title || b.originalName || '').toLowerCase();
-                    break;
-                case 'playCount':
-                    aValue = this.getPlayCount(a.id);
-                    bValue = this.getPlayCount(b.id);
-                    break;
-                case 'timestamp':
-                    aValue = a.lastModified || a.created || 0;
-                    bValue = b.lastModified || b.created || 0;
-                    break;
-                default:
-                    return 0;
-            }
-            
-            if (aValue < bValue) return this.currentSortOrder === 'asc' ? -1 : 1;
-            if (aValue > bValue) return this.currentSortOrder === 'asc' ? 1 : -1;
-            return 0;
-        });
-        
-        // フィルタされたビデオを保存
-        this.filteredVideos = videos;
-        
-        // 表示を更新
-        this.displayThumbnails(videos);
-        
-        console.log(`📊 Filtered ${videos.length} videos from ${this.currentVideos.length} total`);
+        // 直接サムネイルを表示
+        this.displayThumbnails(filteredVideos);
+    },
+
+    applySortAndFilter() {
+        console.log('🔍 applySortAndFilter called, delegating to applySortAndFilterWithVideos with thumbnails');
+        const videosWithThumbnails = this.currentVideos.filter(video => video.thumbnailUrl || video.isTs);
+        console.log(`🔍 Filtering from ${this.currentVideos.length} total videos to ${videosWithThumbnails.length} with thumbnails`);
+        this.applySortAndFilterWithVideos(videosWithThumbnails);
     },
     
     // 現在表示中の動画一覧を取得（フィルタ済み）
@@ -956,7 +1672,18 @@ const VideoApp = {
                     const localFolderId = `local-${btoa(realFolderPath).replace(/[+/=]/g, '')}`;
                     this.switchPlayCountData(localFolderId);
                     
-                    // サムネイルを再読み込み
+                    // 1. サムネイル生成チェックを先に実行し、完了まで待機
+                    console.log('📋 Step 1: Starting thumbnail generation check');
+                    const thumbnailGenerationNeeded = await this.checkAndStartBulkThumbnailGenerationBeforeFetch();
+                    
+                    // 2. サムネイル生成が必要だった場合は完了を待つ
+                    if (thumbnailGenerationNeeded) {
+                        console.log('⏳ Step 2: Waiting for thumbnail generation to complete');
+                        await this.startBulkThumbnailGenerationAndWait();
+                    }
+                    
+                    // 3. サムネイルを取得・表示
+                    console.log('📺 Step 3: Fetching and displaying thumbnails');
                     await this.fetchThumbnails();
                     
                     setTimeout(() => {
@@ -1659,6 +2386,9 @@ const VideoApp = {
                 // 再生回数データを切り替え
                 this.switchPlayCountData(folderId);
                 
+                // サムネイル生成チェックを先に実行
+                await this.checkAndStartBulkThumbnailGenerationBeforeFetch();
+                
                 // サムネイル一覧を更新
                 await this.fetchThumbnails();
                 
@@ -2248,8 +2978,13 @@ const VideoApp = {
 };
 
 // ページ読み込み完了後に初期化
-document.addEventListener('DOMContentLoaded', () => {
-    VideoApp.init();
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await VideoApp.init();
+        console.log('✅ VideoApp initialization completed');
+    } catch (error) {
+        console.error('❌ VideoApp initialization failed:', error);
+    }
 });
 
 // グローバル関数として公開
@@ -2582,19 +3317,143 @@ window.startTranscode = async (videoId) => {
             },
             body: JSON.stringify({ videoId })
         });
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log(`✅ Transcode job started: ${result.jobId}`);
+            // プログレス監視を開始
+            VideoApp.monitorTranscodeProgress(result.jobId, videoId);
+        } else {
+            throw new Error(result.message || 'Failed to start transcode');
+        }
+
+    } catch (error) {
+        console.error('Start transcode error:', error);
+        alert(`トランスコード開始エラー: ${error.message}`);
+    }
+};
+
+// 新しいプログレスバー機能
+VideoApp.showProgressBar = function() {
+    const progressContainer = document.getElementById('thumbnail-progress-container');
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+    }
+};
+
+VideoApp.hideProgressBar = function() {
+    const progressContainer = document.getElementById('thumbnail-progress-container');
+    if (progressContainer) {
+        progressContainer.style.display = 'none';
+    }
+};
+
+VideoApp.updateProgressBar = function(percentage, text = '', details = '') {
+    const progressFill = document.getElementById('progress-fill');
+    const progressPercentage = document.getElementById('progress-percentage');
+    const progressText = document.getElementById('progress-text');
+    const progressDetails = document.getElementById('progress-details');
+    
+    if (progressFill) {
+        progressFill.style.width = `${percentage}%`;
+    }
+    
+    if (progressPercentage) {
+        progressPercentage.textContent = `${Math.round(percentage)}%`;
+    }
+    
+    if (progressText && text) {
+        progressText.textContent = text;
+    }
+    
+    if (progressDetails && details) {
+        progressDetails.textContent = details;
+    }
+};
+
+VideoApp.startThumbnailGenerationWithProgress = async function(videosWithoutThumbnails) {
+    console.log(`🎬 Starting thumbnail generation for ${videosWithoutThumbnails.length} videos`);
+    
+    let completedCount = 0;
+    const totalCount = videosWithoutThumbnails.length;
+    
+    try {
+        // 一括生成APIを呼び出し
+        const response = await fetch('/api/videos/thumbnails/batch-generate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                videoIds: videosWithoutThumbnails.map(v => v.id)
+            })
+        });
         
         const result = await response.json();
         
         if (result.success) {
-            // プログレス表示ダイアログを表示
-            showTranscodeProgress(result.data.jobId);
+            // プログレス監視を開始
+            this.monitorThumbnailProgress(totalCount);
         } else {
-            throw new Error(result.message || 'トランスコードの開始に失敗しました');
+            throw new Error(result.message || 'サムネイル生成の開始に失敗しました');
         }
+        
     } catch (error) {
-        console.error('Transcode start error:', error);
-        alert(`エラー: ${error.message}`);
+        console.error('❌ Error starting thumbnail generation:', error);
+        this.hideProgressBar();
+        alert(`サムネイル生成エラー: ${error.message}`);
     }
+};
+
+VideoApp.monitorThumbnailProgress = async function(totalCount) {
+    let completedCount = 0;
+    let lastUpdate = Date.now();
+    
+    const checkProgress = async () => {
+        try {
+            // サムネイル統計を取得
+            const response = await fetch('/api/videos/thumbnails/stats');
+            const stats = await response.json();
+            
+            if (stats.success) {
+                const currentThumbnailCount = stats.data.totalThumbnails;
+                const totalVideoCount = stats.data.totalVideos;
+                const progress = Math.min((currentThumbnailCount / totalVideoCount) * 100, 100);
+                
+                this.updateProgressBar(
+                    progress,
+                    `サムネイルを生成中... (${currentThumbnailCount}/${totalVideoCount})`,
+                    `処理速度: ${Math.round((currentThumbnailCount - completedCount) / ((Date.now() - lastUpdate) / 1000))}個/秒`
+                );
+                
+                completedCount = currentThumbnailCount;
+                lastUpdate = Date.now();
+                
+                // 完了チェック
+                if (progress >= 100 || currentThumbnailCount >= totalVideoCount) {
+                    this.updateProgressBar(100, 'サムネイル生成完了！', '');
+                    setTimeout(() => {
+                        this.hideProgressBar();
+                        // 動画リストを再読み込み
+                        this.fetchThumbnails();
+                    }, 2000);
+                    return;
+                }
+            }
+            
+            // 5秒後に再チェック
+            setTimeout(checkProgress, 5000);
+            
+        } catch (error) {
+            console.error('❌ Error checking thumbnail progress:', error);
+            // エラーが発生してもプログレス監視を続行
+            setTimeout(checkProgress, 5000);
+        }
+    };
+    
+    // 初回実行
+    setTimeout(checkProgress, 2000);
 };
 
 // 初期化時にアコーディオンを折りたたんだ状態にする
